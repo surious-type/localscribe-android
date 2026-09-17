@@ -1,0 +1,9 @@
+# Task B — deterministic domain logic
+
+Read docs/contracts.md, architecture.md, transcription-pipeline.md and product-spec.md sections 6–8,12–15,20,22,28. Work only core algorithm implementations/tests; do not change model/ports/build files without lead approval. No agents or git mutations. Contracts are binding; report ambiguity to lead.
+
+Implement ChunkPlanner (90s/3s configurable, duration zero, invalid configs, overflow, exact boundaries, no gaps, optional speech boundaries), TranscriptAssembler with absolute timestamps and suffix/prefix dedup restricted to temporal overlap (exact/partial/punctuation/small ASR variation/no-overlap tests; do not discard repeated phrases at distinct times), bounded TranscriptContext, WER/CER edit distance with Unicode normalization and correct empty-reference handling, BenchmarkCalculator with monotonic duration inputs and configuration/hash identity, benchmark-first RecommendationEngine with memory constraint and no download side effects, JobTransitions guarding terminal and pause/cancel states, ExportManager TXT/MD/SRT/VTT/JSON with escaping and source timestamps, strict version comparison and GitHub release parsing. No Android dependency in core. Use JSON library already declared if available; request root amendment otherwise.
+
+TDD: first write behavior tests and run expected failure, then implementation and focused tests. Full :core:test at end. Test serialization escaping, SRT numbering/ms, >hour times, invalid timestamps, semantic version ordering incl 1.10 vs1.9, drafts/prereleases/missing assets/unsafe URLs, state transitions and benchmark zero/negative inputs. Do not parse JSON with regex.
+
+Use source /tmp/localscribe-tools/env.sh and ./gradlew :core:test (network may require escalated). Save docs/reports/B-domain.md with RED/GREEN evidence and exact commands/results. Notify lead once public algorithm signatures match contracts so Android consumers can proceed.

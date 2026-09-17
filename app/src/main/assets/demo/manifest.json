@@ -1,0 +1,36 @@
+{
+  "schemaVersion": 1,
+  "fixtures": [
+    {
+      "id": "english_jfk_37s",
+      "title": "JFK inaugural address — English",
+      "language": "en",
+      "audioAsset": "demo/english_jfk_37s.wav",
+      "referenceAsset": "demo/english_jfk_37s.txt",
+      "durationMs": 37250,
+      "sampleRateHz": 16000,
+      "channels": 1,
+      "encoding": "PCM_S16LE",
+      "naturalSpeech": true,
+      "benchmarkEligible": true,
+      "sourceStartSeconds": 50.25,
+      "sourceEndSeconds": 87.5,
+      "sha256": "2d96f4537a3b87c2f813ecf7ec85fef16e9148b041913e3901700fee73862f97",
+      "sourceUrl": "https://upload.wikimedia.org/wikipedia/commons/d/d5/JFK_inaugural_address.ogg",
+      "sourceSha256": "a257580da6eda796ed1c703e545865005753f7cb20cc042e0db3c44de82274fc",
+      "rights": "Public domain: U.S. federal government official work",
+      "rightsSourceUrl": "https://www.jfklibrary.org/asset-viewer/archives/jfkwha-001",
+      "referenceStatus": "Archival transcript and published caption boundaries; not independently auditioned or word-aligned."
+    }
+  ],
+  "unavailable": [
+    {
+      "language": "ru",
+      "reason": "No independently verified redistributable natural-speech fixture bundled."
+    },
+    {
+      "language": "mixed",
+      "reason": "No independently verified redistributable natural bilingual fixture bundled."
+    }
+  ]
+}

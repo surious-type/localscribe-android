@@ -28,7 +28,11 @@
 ## Status
 
 - Planning: architecture and dependency plan recorded.
-- Research: platform_research active.
-- Environment: toolchain active.
-- A–H: pending.
+- Research: complete; verified stable versions handed to A. No need to repeat research.
+- Environment: completed JDK21/Gradle9.5/SDK37.0+36/NDK30/CMake4.1.2 setup and native smoke compile. Activate `/tmp/localscribe-tools/env.sh`; report `/tmp/localscribe-tools/report.md`.
+- Demo fixtures: completed English public-domain 37.250s WAV + reference + manifest + provenance. Independent review_assets passed format/hash/provenance. RU/mixed explicitly unavailable. Integration caveat for F: enumerate runnable fixtures only; reference transcript not independently auditioned.
+- A: interfaces frozen, partial Gradle scaffold present, build checks and task review pending. Agent interrupted by usage limit, resumed on user's instruction; do not redo contracts.
+- B–H: pending; briefs B–G already prepared.
+- Emulator environment followup: interrupted by usage limit; resumed to inspect partial download and attempt software boot. No connected device/KVM originally available.
+- Recovery audit: git diff has no tracked modifications; implementation files are untracked, not missing. Initial planning commit is 3514913 on codex/localscribe-implementation. Preserve these files.
 - Production signing/release: intentionally not started; requires user action at final gate.

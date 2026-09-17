@@ -1,0 +1,13 @@
+# Task C — durable persistence and background execution
+
+Read docs/contracts.md, architecture.md, transcription-pipeline.md and product-spec.md sections 6,16–18,29,31. Own app data/, execution/ and service/ packages, associated tests/schemas only. No agents/git mutations; no edits to shared core contracts/build/manifest without lead. Use exact shared ports, coordinate additions.
+
+Room entities/DAOs for sources, jobs, chunks, raw segments, installed models and benchmarks. Export schema from version1, explicit non-destructive migration strategy and real migration test (can version2 add index or metadata with actual v1→v2 migration). Unique chunk/index/segment identities and FK cascade. Repository must atomically insert job+plan, claim PENDING/FAILED eligible chunk, increment attempt, persist raw segments+COMPLETED together. Compare current job state before commit so cancelled jobs cannot become completed. Idempotent retries replace only own chunk's raw records, never duplicates. Cold recovery resets PROCESSING to PENDING and RUNNING to PAUSED; maintain completed chunks. Room DAO instrumentation and transactional checkpoint/recovery tests.
+
+Coordinator serializes jobs (Mutex), opens verified model once, bounded window decode through port, handles prompt context/absolute timestamps exactly once, checkpoints each chunk, unloads in finally. Coroutines cancellation must cancel native transcribe and propagate; pause/stop persist correct states, resume skips completed. Config/model hash frozen per job. Don't silently relabel unsupported/import errors success. Define typed domain error translation for UI.
+
+Foreground service uses graph through a small ServiceDependencies interface that UI container later supplies via Application; document integration contract without editing Activity/Application owned by F. Start foreground promptly; notification with progress/audio time and pause/resume/stop PendingIntents; Android35+ mediaProcessing,34 specialUse,26–33 no unsupported type. User-visible launch only, no automatic boot background start. onTimeout promptly cancels work, persists pause and stops. Recovery on app startup. Service action handling must not race jobs.
+
+Thermal monitor via PowerManager29+: moderate reduces future threads, severe/critical pauses with actionable reason; listener unregistration. Long-lived execution notification permission not treated as microphone access. Benchmark storage repository implementation included; actual benchmark/demo orchestration can be F or separate assigned lead scope.
+
+TDD for state/coordinator behavior using fakes. Device tests declared but do not claim run without device. Run compile/tests available, report in docs/reports/C-persistence.md with constructor integration guide and caveats.
