@@ -19,4 +19,6 @@ data class AudioSourceRecord(
     val source: AudioSource,
     val accessStatus: SourceAccessStatus,
     val hasPersistedPermission: Boolean,
+    /** SHA-256 of the selected audio bytes, used to verify a relinked source. */
+    val contentFingerprint: String? = null,
 )

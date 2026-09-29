@@ -8,8 +8,8 @@ object QualityMetrics {
     fun calculate(reference: String, hypothesis: String): QualityScore {
         val normalizedReference = normalize(reference)
         val normalizedHypothesis = normalize(hypothesis)
-        val referenceWords = normalizedReference.words()
-        val hypothesisWords = normalizedHypothesis.words()
+        val referenceWords = normalizedWords(reference)
+        val hypothesisWords = normalizedWords(hypothesis)
         val wordErrors = editDistance(referenceWords, hypothesisWords)
         val referenceCharacters = normalizedReference.nonSpaceCodePoints()
         val hypothesisCharacters = normalizedHypothesis.nonSpaceCodePoints()
@@ -21,6 +21,9 @@ object QualityMetrics {
             referenceWordCount = referenceWords.size,
         )
     }
+
+    /** Token stream used by word-error scoring and UI edit alignment. */
+    fun normalizedWords(text: String): List<String> = normalize(text).words()
 
     private fun normalize(text: String): String {
         val source = Normalizer.normalize(text, Normalizer.Form.NFKC).lowercase(Locale.ROOT)

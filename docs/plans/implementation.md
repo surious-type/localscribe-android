@@ -20,14 +20,16 @@
 
 ## Tasks and dependencies
 
-- [ ] A Bootstrap + shared contracts: root Gradle/wrapper/version catalog, core model/ports, app Gradle/manifest/resources/base application, Android flavors. Verify configuration/compile. Freeze contracts before B–F.
-- [ ] B Domain algorithms: core chunk planner, assembler, bounded context, WER/CER, benchmarks/recommendation, states, export and version/release parsing. TDD with boundary/failure tests. Own core algorithms and tests only.
-- [ ] C Persistence + execution: app data/Room, repository adapters, coordinator, foreground service, thermal policy and lifecycle tests. Depends on A; integrates B/E through frozen contracts.
-- [ ] D Model and update systems: app models/download and updates adapters, verified catalog, resumable downloads, checksum and signer validation, independent flavor update factories. Depends on A/B API contracts. Own network/models/updates only.
-- [ ] E Audio + native: app audio MediaStore/SAF/window decode, app engine JNI and CMake pinned whisper.cpp; cancellation/resource ownership and device tests. Depends on A. No interface changes without lead.
-- [ ] F Compose integration: application container/ViewModels, onboarding/home/details/progress/transcript/player, models/benchmark/compare/demo/settings/update screens. Depends on A–E adapters. Own app ui and container/Activity.
-- [ ] G CI/CD + documentation: reproducible PR/main checks and debug APK artifacts, protected tag release workflow, signing/version docs, architecture subsystem docs, contributor guide update. Depends on A build tasks; does not publish a release.
-- [ ] H Integrated validation: tests/lint/static analysis/debug + unsigned release builds, Room/Compose/native device checks where available; fix integration defects via implementer. Fresh broad reviewer then covering revalidation.
+- [x] A Bootstrap + shared contracts: root Gradle/wrapper/version catalog, core model/ports, app Gradle/manifest/resources/base application, Android flavors. Configuration/core compile checked; independent review approved. Commit will accompany B to keep its shared AppVersion file intact.
+- [x] B Domain algorithms: implemented and independently reviewed after one fix round; 38 tests and ktlint pass. Fixed timestamp matching, release URL trust and memory gating.
+- [x] C Persistence + execution: app data/Room, repository adapters, coordinator, foreground service, thermal policy and lifecycle tests. Depends on A; integrates B/E through frozen contracts.
+- [x] D Model and update systems: app models/download and updates adapters, verified catalog, resumable downloads, checksum and signer validation, independent flavor update factories. Depends on A/B API contracts. Own network/models/updates only.
+- [x] E Audio + native: app audio MediaStore/SAF/window decode, app engine JNI and CMake pinned whisper.cpp; cancellation/resource ownership and device tests. Depends on A. No interface changes without lead.
+- [x] F Compose integration: application container/ViewModels, onboarding/home/details/progress/transcript/player, models/benchmark/compare/demo/settings/update screens. Depends on A–E adapters. Own app ui and container/Activity.
+  - [x] F1 real benchmark/demo adapters and tests (app/benchmark only; may run after C/E while D is independent).
+  - [x] F2 Compose/application container consumes F1; do not reimplement benchmark internals.
+- [x] G CI/CD + documentation: reproducible PR/main checks and debug APK artifacts, protected tag release workflow, signing/version docs, architecture subsystem docs, contributor guide update. Depends on A build tasks; does not publish a release.
+- [x] H Integrated validation: tests/lint/static analysis/debug + unsigned release builds, Room/Compose/native device checks where available; fix integration defects via implementer. Fresh broad reviewer then covering revalidation.
 
 ## Per-task steps
 

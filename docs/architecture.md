@@ -28,6 +28,10 @@ Default windows are 90 seconds with 3 seconds overlap (configurable). Persist th
 
 One foreground service serializes jobs and holds the model between chunks. Pause/stop persist intent and abort native work when needed. Timeout, thermal critical state and lost source access are actionable persistent states, not retry loops. Android service-type compatibility and time limits must be handled explicitly.
 
+The application container owns one shared execution mutex. The coordinator holds it across model load/inference/unload; benchmarks use the same mutex; installed-model deletion acquires it before removing files. This prevents competing heavy inference and a check-then-delete race with native model ownership. Downloads may stream concurrently but must not overwrite an actively used artifact in place.
+
+Room repository methods do not acquire that execution mutex: they provide persistence transactions only. An outer model deletion/session owner may call them while holding the mutex; relocking the non-reentrant mutex inside the repository would deadlock.
+
 ## Presentation
 
 Material 3, edge-to-edge, adaptive width, light/dark and optional dynamic colors. Onboarding → recordings/import → progress → transcript with seek/search/export. Separate Models/benchmark/demo and Settings/Updates. Keep stack traces and sensitive filenames/transcript contents out of logs and error UI.

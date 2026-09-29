@@ -52,6 +52,8 @@ data class TranscriptionJob(
     val status: JobStatus,
     val createdAtEpochMs: Long,
     val updatedAtEpochMs: Long,
+    /** Immutable SHA-256 source identity for checkpoint-safe resume. */
+    val sourceFingerprint: String? = null,
     val completedAtEpochMs: Long? = null,
     val failure: DomainFailure? = null,
 )

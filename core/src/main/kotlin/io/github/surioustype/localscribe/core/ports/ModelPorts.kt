@@ -28,7 +28,14 @@ interface InstalledModelRepository {
 
     suspend fun getInstalledModel(modelId: String): InstalledModel?
 
+    suspend fun getInstalledModel(modelId: String, sha256: String): InstalledModel? =
+        getInstalledModel(modelId)?.takeIf { it.sha256.equals(sha256, ignoreCase = true) }
+
     suspend fun register(model: InstalledModel)
+
+    /** Removes one immutable revision without affecting retained revisions of the descriptor. */
+    suspend fun remove(model: InstalledModel): Unit =
+        throw UnsupportedOperationException("Exact model revision removal is not implemented")
 
     suspend fun remove(modelId: String)
 }

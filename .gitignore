@@ -15,3 +15,5 @@ captures/
 *.key
 secrets.properties
 keystore.properties
+.local-tools/
+.review/

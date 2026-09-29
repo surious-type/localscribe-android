@@ -24,13 +24,11 @@
         android:roundIcon="@drawable/ic_launcher"
         android:supportsRtl="true"
         android:theme="@style/Theme.LocalScribe"
-        tools:ignore="MissingClass"
         tools:targetApi="35">
 
         <activity
             android:name=".MainActivity"
-            android:exported="true"
-            tools:ignore="MissingClass">
+            android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
 
@@ -49,8 +47,7 @@
         <service
             android:name=".service.TranscriptionService"
             android:exported="false"
-            android:foregroundServiceType="mediaProcessing|specialUse"
-            tools:ignore="MissingClass">
+            android:foregroundServiceType="mediaProcessing|specialUse">
             <property
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="Long-running, fully local transcription of user-selected audio" />

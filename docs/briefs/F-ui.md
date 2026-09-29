@@ -1,8 +1,10 @@
 # Task F — application integration and Compose experience
 
-Read docs/contracts.md and preceding A–E reports/constructors, architecture.md and full product-spec.md. Own app Application/Activity, di/, ui/, benchmark/ packages and associated Compose/benchmark tests. No shared contract/build changes without lead. No agents/git mutations. Use finished adapters; do not replace real flows with mocks/placeholders.
+Read docs/contracts.md and preceding A–E reports/constructors, architecture.md and full product-spec.md. Own app Application/Activity, di/, ui/ packages and associated Compose tests. F1 owns benchmark/ and its tests; consume its real adapters without duplicating them. No shared contract/build changes without lead. No agents/git mutations. Use finished adapters; do not replace real flows with mocks/placeholders.
 
 Dependency container wires Room repository, audio pipeline/repository, Whisper engine factories, coordinator/service dependencies, model catalog/downloader/installed repository, flavor updater, benchmark and demo. Recover interrupted Room state once on process startup before accepting jobs. All UI work through scoped ViewModels/Flow and lifecycle-aware collection, IO off main. Multiple screens should not instantiate competing native engines: shared execution gate prevents benchmark/transcription/model deletion races.
+
+Own a single shared execution Mutex; inject it into coordinator, benchmark manager and model deletion. Session load/transcribe/unload is under this mutex. Use explicit busy states, not competing native calls.
 
 Material3 Navigation Compose responsive phones/tablets, edge-to-edge, system dark/light and optional dynamic colors persisted. Onboarding explains offline privacy, model downloads and recommends multilingual Small. Home active jobs/recent audio/completed transcripts/import, MediaStore permission request only when listing, SAF picker always works, ACTION_SEND/VIEW receiving audio. Source detail model/language/start controls validate installed model, source access and duration. Progress pause/resume/stop with persisted status/errors, not fabricated estimates.
 
@@ -13,3 +15,5 @@ Models shows catalog names/sizes/languages/quality, installed space, verificatio
 Settings → Updates includes app version, persisted automatic toggle, last checked, manual immediate check, no-update/errors/notes/update action, system unknown source permission return, verified installer handoff. Play shows updates disabled/store-managed. About privacy/license fixture provenance.
 
 Accessibility descriptions for icon buttons, >=48dp touch targets, font scaling and scrolling, no hard-coded narrow widths. Use resource strings where practical; cohesive modern UI, no stack traces. Compose tests cover onboarding + critical navigation/import/start state. Save docs/reports/F-ui.md actual validation and remaining limitations; add constructor integration docs if changed.
+
+Review integration requirements: construct InstalledModelFileStore and route UI deletion through it, guarding any pending/running/paused job reference. Pass exactly the same Mutex instance to coordinator, benchmark manager, and file store; add graph-level identity/cancellation test. E verifies file length/SHA before native load; file store additionally enforces canonical private paths. D is adding retained model revisions and exact hash lookup, so new jobs choose latest installed descriptor revision while resumed jobs keep their frozen hash.

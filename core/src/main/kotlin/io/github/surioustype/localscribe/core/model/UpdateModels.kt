@@ -87,6 +87,7 @@ data class AppRelease(
 )
 
 enum class UpdateAvailability {
+    UNKNOWN,
     DISABLED,
     CHECKING,
     UP_TO_DATE,

@@ -8,4 +8,6 @@ Tag vX.Y.Z release workflow validates strict tag matches versionName and increas
 
 README: local-first purpose/privacy, honest implementation and validation state (do not claim all checks pass until root), exact build commands/env/JDK/SDK, APK artifact access, model sources/verification, release setup and signing secrets location, first-key/first-release user gate. Contributor AGENTS concise 200–400 words title Repository Guidelines updated to actual structure/tests/commands/conventions. Repo initially no commit convention; choose imperative subjects and scoped PR requirements, not fabricated history.
 
+Preserve the user-added Cost-aware agent routing section and its rules in AGENTS.md. Replace only stale scaffold descriptions above it with actual build/source guidance; do not remove or weaken user instructions to hit a word count. Git history now has imperative subjects and reviewed A/B foundation commit2d3aafa. Add .gitattributes for source LF and generated gradlew.bat CRLF if useful; retain authentic wrapper content.
+
 Test version script positive/negative and parse YAML, inspect commands against Gradle tasks. Save docs/reports/G-delivery.md exact checks and constraints. CI execution itself is root responsibility after publication.

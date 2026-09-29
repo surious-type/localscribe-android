@@ -63,6 +63,13 @@ interface TranscriptionRepository {
 
     suspend fun resumeJob(jobId: String, resumedAtEpochMs: Long)
 
+    /** Drops all checkpointed output and binds a restart to [sourceFingerprint] atomically. */
+    suspend fun restartForSourceFingerprint(
+        jobId: String,
+        sourceFingerprint: String,
+        restartedAtEpochMs: Long,
+    )
+
     suspend fun cancelJob(jobId: String, cancelledAtEpochMs: Long)
 
     suspend fun failJob(jobId: String, failure: DomainFailure, failedAtEpochMs: Long)

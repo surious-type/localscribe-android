@@ -5,6 +5,11 @@ import org.junit.Test
 
 class QualityMetricsTest {
     @Test
+    fun `normalized words are the same token stream used by WER`() {
+        assertEquals(listOf("café", "world"), QualityMetrics.normalizedWords("Café,   WORLD!"))
+    }
+
+    @Test
     fun `unicode case punctuation and spacing normalize consistently`() {
         val result = QualityMetrics.calculate("Café,   WORLD!", "cafe\u0301 world")
 

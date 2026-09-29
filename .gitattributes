@@ -1,0 +1,3 @@
+# Keep source portable while retaining the generated Windows Gradle wrapper.
+* text=auto eol=lf
+*.bat text eol=crlf

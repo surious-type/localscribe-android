@@ -1,0 +1,100 @@
+name: Release Android APK
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate-and-build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install exact Android build dependencies
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses
+          "$sdkmanager" --install 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;30.0.16248370' 'cmake;4.1.2'
+      - uses: gradle/actions/wrapper-validation@4733eaac7c1b0da527e4206b7671e0061de1ce37 # v6
+      - uses: gradle/actions/setup-gradle@4733eaac7c1b0da527e4206b7671e0061de1ce37 # v6
+        with:
+          cache-provider: basic
+      - name: Validate release version
+        run: bash scripts/version/test-validate-release.sh && scripts/version/validate-release.sh "${GITHUB_REF_NAME}"
+      - name: Run checks and build unsigned release APK
+        run: >-
+          ./gradlew --stacktrace staticAnalysis :core:test :app:testGithubDebugUnitTest
+          :app:testPlayDebugUnitTest :app:lintGithubDebug :app:lintPlayDebug
+          :app:assembleGithubRelease
+      - name: Hand off unsigned release APK
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: localscribe-unsigned-github-release
+          path: app/build/outputs/apk/github/release/app-github-release-unsigned.apk
+          if-no-files-found: error
+          retention-days: 1
+
+  sign-and-publish:
+    needs: validate-and-build
+    runs-on: ubuntu-24.04
+    environment: production
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install apksigner build tools
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses
+          "$sdkmanager" --install 'build-tools;36.0.0'
+      - name: Download verified release candidate
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: localscribe-unsigned-github-release
+          path: release-candidate
+      - name: Sign and verify release APK
+        env:
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          keystore_path="$RUNNER_TEMP/localscribe-release.keystore"
+          trap 'rm -f "$keystore_path"' EXIT
+          : "${ANDROID_KEYSTORE_BASE64:?Missing protected production secret}"
+          : "${ANDROID_KEYSTORE_PASSWORD:?Missing protected production secret}"
+          : "${ANDROID_KEY_ALIAS:?Missing protected production secret}"
+          : "${ANDROID_KEY_PASSWORD:?Missing protected production secret}"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$keystore_path"
+          signed_apk="localscribe-${RELEASE_TAG}.apk"
+          cp release-candidate/app-github-release-unsigned.apk "$signed_apk"
+          apksigner="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          "$apksigner" sign --ks "$keystore_path" --ks-key-alias "$ANDROID_KEY_ALIAS" --ks-pass "pass:$ANDROID_KEYSTORE_PASSWORD" --key-pass "pass:$ANDROID_KEY_PASSWORD" "$signed_apk"
+          "$apksigner" verify --verbose --print-certs "$signed_apk"
+          sha256sum "$signed_apk" > "${signed_apk}.sha256"
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: >-
+          gh release create "$RELEASE_TAG" "localscribe-${RELEASE_TAG}.apk"
+          "localscribe-${RELEASE_TAG}.apk.sha256" --title "LocalScribe $RELEASE_TAG"
+          --generate-notes

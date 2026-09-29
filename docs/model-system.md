@@ -16,6 +16,8 @@ The initial catalog uses `ggerganov/whisper.cpp` on Hugging Face. LFS object IDs
 
 Source: https://huggingface.co/api/models/ggerganov/whisper.cpp/tree/main?recursive=false
 
+Optional VAD catalog entry: `ggml-silero-v6.2.0.bin`, 885098 bytes, SHA-256 `2aa269b785eeb53a82983a20501ddf7c1d9c48e33ab63a41391ac6c9f7fb6987`, URL `https://huggingface.co/ggml-org/whisper-vad/resolve/main/ggml-silero-v6.2.0.bin`. Verified against the official whisper.cpp v1.9.4 downloader and Hugging Face LFS metadata on 2026-09-17. Mark as VAD, exclude from transcription model choices and speed recommendations. Download remains explicit; use only after checksum verification.
+
 Download only on explicit request. Stream into private `.part` files, bound received bytes, verify expected length and SHA-256, then atomically rename on the same filesystem before marking installed. Resume must validate Content-Range; a server returning 200 to a range request requires truncation and restart. Check cancellation while streaming and hashing. Never expose an incomplete file to the engine. Model deletion must respect active use.
 
 No token is included in the APK. Catalog validation rejects unsafe names, non-HTTPS URLs, invalid hashes and absurd sizes. The HTTPS catalog publisher remains a trust boundary: hashes detect damaged downloads, not a compromised catalog publisher.

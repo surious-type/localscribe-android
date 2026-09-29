@@ -11,7 +11,13 @@ interface AudioRepository {
 
     suspend fun getSource(sourceId: String): AudioSourceRecord?
 
+    /** Re-reads the source identity before resuming checkpointed work. */
+    suspend fun verifySource(sourceId: String): AudioSourceRecord?
+
     suspend fun importSource(uri: String, takePersistablePermission: Boolean): AudioSource
+
+    /** Replaces a lost source's backing URI while retaining jobs' durable source id. */
+    suspend fun relinkSource(sourceId: String, uri: String, takePersistablePermission: Boolean)
 
     suspend fun removeSource(sourceId: String)
 }
