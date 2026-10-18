@@ -57,7 +57,9 @@ class AndroidAudioRepository(
                 .distinctBy { it.source.id }
                 .sortedWith(
                     compareByDescending<AudioSourceRecord> { record ->
-                        record.source.id.removePrefix("media:").toLongOrNull() ?: Long.MIN_VALUE
+                        record.source.id
+                            .removePrefix("media:")
+                            .toLongOrNull() ?: Long.MIN_VALUE
                     }.thenBy { it.source.displayName.lowercase() },
                 )
         }

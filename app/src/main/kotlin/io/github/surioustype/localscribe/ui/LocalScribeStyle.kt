@@ -85,10 +85,12 @@ fun formatAudioDuration(milliseconds: Long): String {
     }
 }
 
-fun formatLocalDate(epochMs: Long): String = DateFormat.getDateTimeInstance(
-    DateFormat.SHORT,
-    DateFormat.SHORT,
-).format(Date(epochMs))
+fun formatLocalDate(epochMs: Long): String =
+    DateFormat
+        .getDateTimeInstance(
+            DateFormat.SHORT,
+            DateFormat.SHORT,
+        ).format(Date(epochMs))
 
 fun localizedJobStatus(raw: String): String =
     when (raw.uppercase()) {
@@ -99,7 +101,7 @@ fun localizedJobStatus(raw: String): String =
         "CANCELLED" -> "Отменено"
         "FAILED" -> "Ошибка"
         else -> raw
-}
+    }
 
 fun localizedSourceStatus(raw: String): String =
     when (raw.uppercase()) {
@@ -107,4 +109,4 @@ fun localizedSourceStatus(raw: String): String =
         "MISSING" -> "Файл недоступен"
         "PERMISSION_REQUIRED" -> "Нужен доступ"
         else -> raw
-}
+    }

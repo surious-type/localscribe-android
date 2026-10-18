@@ -10,44 +10,42 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Folder
-import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Tune
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.FileDownload
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.OutlinedButton
@@ -57,10 +55,8 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
-import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -75,8 +71,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -106,8 +102,8 @@ import io.github.surioustype.localscribe.di.AppPreferences
 import io.github.surioustype.localscribe.service.TranscriptionService
 import io.github.surioustype.localscribe.ui.playback.AndroidMediaPlayerBackend
 import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackController
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import java.util.UUID
 
 private enum class Destination { HOME, PROCESSING, MODELS, SETTINGS }
@@ -168,14 +164,15 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                 Destination.valueOf(savedUi.destination)
             }.getOrDefault(Destination.HOME)
         val detail = savedUi.transcriptJobId != null || savedUi.selectedSourceId != null
-        val title = when {
-            savedUi.transcriptJobId != null -> "Транскрипция"
-            savedUi.selectedSourceId != null -> "Настройка транскрибации"
-            destination == Destination.HOME -> "LocalScribe"
-            destination == Destination.PROCESSING -> "Обработка"
-            destination == Destination.MODELS -> "Модели"
-            else -> "Настройки"
-        }
+        val title =
+            when {
+                savedUi.transcriptJobId != null -> "Транскрипция"
+                savedUi.selectedSourceId != null -> "Настройка транскрибации"
+                destination == Destination.HOME -> "LocalScribe"
+                destination == Destination.PROCESSING -> "Обработка"
+                destination == Destination.MODELS -> "Модели"
+                else -> "Настройки"
+            }
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
@@ -184,32 +181,38 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                     navigationIcon = {
                         if (detail) {
                             IconButton(onClick = {
-                                if (savedUi.transcriptJobId != null) uiModel.showTranscript(null)
-                                else uiModel.selectSource(null)
+                                if (savedUi.transcriptJobId != null) {
+                                    uiModel.showTranscript(null)
+                                } else {
+                                    uiModel.selectSource(null)
+                                }
                             }) { Icon(Icons.Default.ArrowBack, contentDescription = "Назад") }
                         }
                     },
-                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.background,
-                    ),
+                    colors =
+                        androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background,
+                        ),
                 )
             },
             bottomBar = {
                 if (!detail) {
                     NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
                         Destination.entries.forEach { item ->
-                            val icon = when (item) {
-                                Destination.HOME -> Icons.Default.Home
-                                Destination.PROCESSING -> Icons.Default.Mic
-                                Destination.MODELS -> Icons.Default.Folder
-                                Destination.SETTINGS -> Icons.Default.Settings
-                            }
-                            val label = when (item) {
-                                Destination.HOME -> "Записи"
-                                Destination.PROCESSING -> "Обработка"
-                                Destination.MODELS -> "Модели"
-                                Destination.SETTINGS -> "Настройки"
-                            }
+                            val icon =
+                                when (item) {
+                                    Destination.HOME -> Icons.Default.Home
+                                    Destination.PROCESSING -> Icons.Default.Mic
+                                    Destination.MODELS -> Icons.Default.Folder
+                                    Destination.SETTINGS -> Icons.Default.Settings
+                                }
+                            val label =
+                                when (item) {
+                                    Destination.HOME -> "Записи"
+                                    Destination.PROCESSING -> "Обработка"
+                                    Destination.MODELS -> "Модели"
+                                    Destination.SETTINGS -> "Настройки"
+                                }
                             NavigationBarItem(
                                 selected = destination == item,
                                 onClick = { uiModel.selectDestination(item.name) },
@@ -222,7 +225,10 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
             },
         ) { padding ->
             Column(
-                Modifier.fillMaxSize().padding(padding).widthIn(max = 900.dp)
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .widthIn(max = 900.dp)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 when {
@@ -239,7 +245,8 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                             close = { uiModel.showTranscript(null) },
                         )
                     savedUi.selectedSourceId != null -> {
-                        val installed by graph.installedModels.observeInstalledModels()
+                        val installed by graph.installedModels
+                            .observeInstalledModels()
                             .collectAsStateWithLifecycle(emptyList())
                         LazyColumn {
                             item {
@@ -258,9 +265,10 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                     destination == Destination.HOME -> Home(graph, receivedUri, uiModel, savedUi)
                     destination == Destination.PROCESSING -> Processing(graph, uiModel)
                     destination == Destination.MODELS -> Models(graph, uiModel, savedUi)
-                    else -> Settings(graph, preferences, { appearanceMode = it }, {
-                        dynamicColors = it
-                    })
+                    else ->
+                        Settings(graph, preferences, { appearanceMode = it }, {
+                            dynamicColors = it
+                        })
                 }
             }
         }
@@ -352,26 +360,30 @@ private fun Home(
     var query by remember { mutableStateOf("") }
     var filter by remember { mutableStateOf("all") }
     var sort by remember { mutableStateOf("new") }
-    val visible = sources.filter { item ->
-        item.source.displayName.contains(query, ignoreCase = true) &&
-            when (filter) {
-                "ready" -> jobs.any {
-                    it.sourceId == item.source.id && it.status == JobStatus.COMPLETED
+    val visible =
+        sources
+            .filter { item ->
+                item.source.displayName.contains(query, ignoreCase = true) &&
+                    when (filter) {
+                        "ready" ->
+                            jobs.any {
+                                it.sourceId == item.source.id && it.status == JobStatus.COMPLETED
+                            }
+                        "new" ->
+                            jobs.none {
+                                it.sourceId == item.source.id && it.status == JobStatus.COMPLETED
+                            }
+                        else -> true
+                    }
+            }.let { items ->
+                when (sort) {
+                    "az" -> items.sortedBy { it.source.displayName.lowercase() }
+                    "za" -> items.sortedByDescending { it.source.displayName.lowercase() }
+                    "long" -> items.sortedByDescending { it.source.durationMs }
+                    "short" -> items.sortedBy { it.source.durationMs }
+                    else -> items
                 }
-                "new" -> jobs.none {
-                    it.sourceId == item.source.id && it.status == JobStatus.COMPLETED
-                }
-                else -> true
             }
-    }.let { items ->
-        when (sort) {
-            "az" -> items.sortedBy { it.source.displayName.lowercase() }
-            "za" -> items.sortedByDescending { it.source.displayName.lowercase() }
-            "long" -> items.sortedByDescending { it.source.durationMs }
-            "short" -> items.sortedBy { it.source.durationMs }
-            else -> items
-        }
-    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Ваши записи", style = MaterialTheme.typography.headlineMedium)
@@ -427,7 +439,10 @@ private fun Home(
                     ).forEach { (value, title) ->
                         androidx.compose.material3.DropdownMenuItem(
                             text = { Text(title) },
-                            onClick = { sort = value; menuOpen = false },
+                            onClick = {
+                                sort = value
+                                menuOpen = false
+                            },
                         )
                     }
                 }
@@ -452,9 +467,10 @@ private fun Home(
             }
         }
         items(visible, key = { it.source.id }) { record ->
-            val ready = jobs.any {
-                it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
-            }
+            val ready =
+                jobs.any {
+                    it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
+                }
             Card(
                 Modifier.fillMaxWidth().clickable { uiModel.selectSource(record.source.id) },
                 colors = localScribeCardColors(),
@@ -496,20 +512,22 @@ private fun Home(
     }
 }
 
-
 @Composable
 private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
     val context = LocalContext.current
     val jobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
     val sources by graph.audioRepository.observeSources().collectAsStateWithLifecycle(emptyList())
     var filter by remember { mutableStateOf("active") }
-    val visible = jobs.filter { job ->
-        when (filter) {
-            "active" -> job.status in setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
-            "done" -> job.status == JobStatus.COMPLETED
-            else -> job.status in setOf(JobStatus.CANCELLED, JobStatus.FAILED)
+    val visible =
+        jobs.filter { job ->
+            when (filter) {
+                "active" ->
+                    job.status in
+                        setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
+                "done" -> job.status == JobStatus.COMPLETED
+                else -> job.status in setOf(JobStatus.CANCELLED, JobStatus.FAILED)
+            }
         }
-    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Задачи", style = MaterialTheme.typography.headlineMedium)
@@ -536,8 +554,11 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
                 job = job,
                 graph = graph,
                 context = context,
-                sourceName = sources.firstOrNull { it.source.id == job.sourceId }
-                    ?.source?.displayName,
+                sourceName =
+                    sources
+                        .firstOrNull { it.source.id == job.sourceId }
+                        ?.source
+                        ?.displayName,
                 showTranscript = { uiModel.showTranscript(job.id) },
             )
         }
@@ -660,7 +681,10 @@ private fun SourceControls(
         }
     var sourceName by remember { mutableStateOf("Аудиозапись") }
     LaunchedEffect(sourceId) {
-        sourceName = graph.audioRepository.getSource(sourceId)?.source?.displayName ?: "Аудиозапись"
+        sourceName = graph.audioRepository
+            .getSource(sourceId)
+            ?.source
+            ?.displayName ?: "Аудиозапись"
     }
     Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
         Card(colors = localScribeCardColors(), shape = localScribeShape) {
@@ -688,9 +712,10 @@ private fun SourceControls(
             Card(
                 shape = localScribeShape,
                 colors = localScribeCardColors(),
-                modifier = Modifier.fillMaxWidth().clickable {
-                    uiModel.setSourceSetup(model.descriptorId, language, null)
-                },
+                modifier =
+                    Modifier.fillMaxWidth().clickable {
+                        uiModel.setSourceSetup(model.descriptorId, language, null)
+                    },
             ) {
                 Row(
                     Modifier.fillMaxWidth().padding(14.dp),
@@ -820,11 +845,14 @@ private fun JobRow(
             }
         }
     val totalDuration = (chunks.maxOfOrNull { it.endMs } ?: 0L).coerceAtLeast(1L)
-    val completedDuration = chunks.filter {
-        it.status.name == "COMPLETED"
-    }.maxOfOrNull { it.endMs } ?: 0L
+    val completedDuration =
+        chunks
+            .filter {
+                it.status.name == "COMPLETED"
+            }.maxOfOrNull { it.endMs } ?: 0L
     val savedSegments by graph.transcriptionRepository
-        .observeSegments(job.id).collectAsStateWithLifecycle(emptyList())
+        .observeSegments(job.id)
+        .collectAsStateWithLifecycle(emptyList())
     Card(
         Modifier.fillMaxWidth(),
         colors = localScribeCardColors(),
@@ -843,8 +871,11 @@ private fun JobRow(
             )
             LocalScribeProgress(
                 progress =
-                    if (job.status == JobStatus.RUNNING && completedDuration == 0L) null
-                    else completedDuration.toFloat() / totalDuration.toFloat(),
+                    if (job.status == JobStatus.RUNNING && completedDuration == 0L) {
+                        null
+                    } else {
+                        completedDuration.toFloat() / totalDuration.toFloat()
+                    },
             )
             if (job.status == JobStatus.RUNNING) {
                 val elapsed = (now - job.updatedAtEpochMs).coerceAtLeast(0L)
@@ -1078,9 +1109,10 @@ private fun TranscriptScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(onClick = {
                             scope.launch {
-                                val source = job?.let {
-                                    graph.audioRepository.getSource(it.sourceId)?.source
-                                } ?: return@launch
+                                val source =
+                                    job?.let {
+                                        graph.audioRepository.getSource(it.sourceId)?.source
+                                    } ?: return@launch
                                 if (playback.isPlaying) player.pause() else player.play(source.uri)
                             }
                         }) {
@@ -1092,17 +1124,20 @@ private fun TranscriptScreen(
                         }
                     }
                     Slider(
-                        value = playback.positionMs.coerceIn(
-                            0L,
-                            playback.durationMs.coerceAtLeast(1L),
-                        ).toFloat(),
+                        value =
+                            playback.positionMs
+                                .coerceIn(
+                                    0L,
+                                    playback.durationMs.coerceAtLeast(1L),
+                                ).toFloat(),
                         onValueChange = { position ->
                             sourceUri?.let { player.seekTo(it, position.toLong()) }
                         },
                         valueRange = 0f..playback.durationMs.coerceAtLeast(1L).toFloat(),
-                        modifier = Modifier.fillMaxWidth().semantics {
-                            contentDescription = "Позиция воспроизведения"
-                        },
+                        modifier =
+                            Modifier.fillMaxWidth().semantics {
+                                contentDescription = "Позиция воспроизведения"
+                            },
                     )
                     Text(
                         formatAudioDuration(playback.positionMs) + " / " +
@@ -1133,8 +1168,11 @@ private fun TranscriptScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         Text(
-                            if (job?.status == JobStatus.COMPLETED) "Речь не обнаружена"
-                            else "Текст пока не готов",
+                            if (job?.status == JobStatus.COMPLETED) {
+                                "Речь не обнаружена"
+                            } else {
+                                "Текст пока не готов"
+                            },
                             style = MaterialTheme.typography.titleMedium,
                         )
                         Text(
@@ -1156,14 +1194,19 @@ private fun TranscriptScreen(
             Card(
                 colors = localScribeCardColors(),
                 shape = RoundedCornerShape(14.dp),
-                modifier = Modifier.fillMaxWidth().clickable {
-                    scope.launch {
-                        val uri = job?.let {
-                            graph.audioRepository.getSource(it.sourceId)?.source?.uri
+                modifier =
+                    Modifier.fillMaxWidth().clickable {
+                        scope.launch {
+                            val uri =
+                                job?.let {
+                                    graph.audioRepository
+                                        .getSource(it.sourceId)
+                                        ?.source
+                                        ?.uri
+                                }
+                            uri?.let { player.seekTo(it, segment.absoluteStartMs) }
                         }
-                        uri?.let { player.seekTo(it, segment.absoluteStartMs) }
-                    }
-                },
+                    },
             ) {
                 Column(
                     Modifier.fillMaxWidth().padding(14.dp),
@@ -1195,9 +1238,10 @@ private fun TranscriptScreen(
             OutlinedButton(
                 onClick = {
                     scope.launch {
-                        val source = job?.let {
-                            graph.audioRepository.getSource(it.sourceId)?.source
-                        } ?: return@launch
+                        val source =
+                            job?.let {
+                                graph.audioRepository.getSource(it.sourceId)?.source
+                            } ?: return@launch
                         runCatching {
                             TranscriptExporter(context).share(source, segments, ExportFormat.TXT)
                         }.onSuccess { setStatus("Текст отправлен") }
@@ -1226,13 +1270,14 @@ private fun TranscriptScreen(
                         onClick = {
                             showExport = false
                             setExportFormat(format.name)
-                            val (extension, mime) = when (format) {
-                                ExportFormat.TXT -> "txt" to "text/plain"
-                                ExportFormat.MARKDOWN -> "md" to "text/markdown"
-                                ExportFormat.SRT -> "srt" to "application/x-subrip"
-                                ExportFormat.VTT -> "vtt" to "text/vtt"
-                                ExportFormat.JSON -> "json" to "application/json"
-                            }
+                            val (extension, mime) =
+                                when (format) {
+                                    ExportFormat.TXT -> "txt" to "text/plain"
+                                    ExportFormat.MARKDOWN -> "md" to "text/markdown"
+                                    ExportFormat.SRT -> "srt" to "application/x-subrip"
+                                    ExportFormat.VTT -> "vtt" to "text/vtt"
+                                    ExportFormat.JSON -> "json" to "application/json"
+                                }
                             val intent =
                                 Intent(Intent.ACTION_CREATE_DOCUMENT)
                                     .addCategory(Intent.CATEGORY_OPENABLE)
@@ -1297,15 +1342,24 @@ private fun Models(
         ) { descriptor ->
             val installedModel = installed.firstOrNull { it.descriptorId == descriptor.id }
             val download = downloads.firstOrNull { it.modelId == descriptor.id }
-            Card(Modifier.fillMaxWidth(), colors = localScribeCardColors(), shape = localScribeShape) {
+            Card(
+                Modifier.fillMaxWidth(),
+                colors = localScribeCardColors(),
+                shape = localScribeShape,
+            ) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(descriptor.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
-                    val qualityLabel = when (descriptor.quality.name) {
-                        "LOW" -> "Для быстрых задач"
-                        "BALANCED" -> "Баланс скорости и качества"
-                        "HIGH" -> "Высокое качество"
-                        else -> "Мультиязычная"
-                    }
+                    Text(
+                        descriptor.displayName,
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    val qualityLabel =
+                        when (descriptor.quality.name) {
+                            "LOW" -> "Для быстрых задач"
+                            "BALANCED" -> "Баланс скорости и качества"
+                            "HIGH" -> "Высокое качество"
+                            else -> "Мультиязычная"
+                        }
                     Text(
                         qualityLabel + " · " +
                             (descriptor.installedBytes / (1024 * 1024)) + " МБ",
@@ -1400,15 +1454,16 @@ private fun Models(
                         }
                     }
                     download?.let {
-                        val state = when (it.status.name) {
-                            "DOWNLOADING" -> "Скачивание"
-                            "VERIFYING" -> "Проверка SHA-256"
-                            "QUEUED" -> "В очереди"
-                            "COMPLETED" -> "Готово"
-                            "CANCELLED" -> "Отменено"
-                            "FAILED" -> "Ошибка загрузки"
-                            else -> it.status.name
-                        }
+                        val state =
+                            when (it.status.name) {
+                                "DOWNLOADING" -> "Скачивание"
+                                "VERIFYING" -> "Проверка SHA-256"
+                                "QUEUED" -> "В очереди"
+                                "COMPLETED" -> "Готово"
+                                "CANCELLED" -> "Отменено"
+                                "FAILED" -> "Ошибка загрузки"
+                                else -> it.status.name
+                            }
                         Text(
                             state + " · " + (it.downloadedBytes / (1024 * 1024)) +
                                 " / " + (it.totalBytes / (1024 * 1024)) + " МБ",
@@ -1476,15 +1531,16 @@ private fun Models(
                         }) { Text("Удалить VAD") }
                     }
                     download?.let {
-                        val state = when (it.status.name) {
-                            "DOWNLOADING" -> "Скачивание"
-                            "VERIFYING" -> "Проверка SHA-256"
-                            "QUEUED" -> "В очереди"
-                            "COMPLETED" -> "Готово"
-                            "CANCELLED" -> "Отменено"
-                            "FAILED" -> "Ошибка загрузки"
-                            else -> it.status.name
-                        }
+                        val state =
+                            when (it.status.name) {
+                                "DOWNLOADING" -> "Скачивание"
+                                "VERIFYING" -> "Проверка SHA-256"
+                                "QUEUED" -> "В очереди"
+                                "COMPLETED" -> "Готово"
+                                "CANCELLED" -> "Отменено"
+                                "FAILED" -> "Ошибка загрузки"
+                                else -> it.status.name
+                            }
                         Text(
                             state + " · " + (it.downloadedBytes / (1024 * 1024)) +
                                 " / " + (it.totalBytes / (1024 * 1024)) + " МБ",
@@ -1537,15 +1593,17 @@ private fun Models(
         }
         item {
             Text(
-                "Тест: " + when (runState.phase.name) {
-                    "IDLE" -> if (benchmarkController.isBusy) "Подготовка…" else "Не запущен"
-                    "RUNNING" -> "Обрабатывается " +
-                        (runState.modelId ?: "модель") + " · " +
-                        runState.completedModels + "/" + runState.totalModels
-                    "COMPLETED" -> "Тест завершён"
-                    "CANCELLED" -> "Тест отменён"
-                    else -> "Ошибка тестирования"
-                },
+                "Тест: " +
+                    when (runState.phase.name) {
+                        "IDLE" -> if (benchmarkController.isBusy) "Подготовка…" else "Не запущен"
+                        "RUNNING" ->
+                            "Обрабатывается " +
+                                (runState.modelId ?: "модель") + " · " +
+                                runState.completedModels + "/" + runState.totalModels
+                        "COMPLETED" -> "Тест завершён"
+                        "CANCELLED" -> "Тест отменён"
+                        else -> "Ошибка тестирования"
+                    },
             )
         }
         status?.let { item { Text(it, color = MaterialTheme.colorScheme.primary) } }
@@ -1688,13 +1746,37 @@ private fun Settings(
                         preferences.appearanceMode = mode.name
                         setAppearanceMode(mode)
                     },
-                    label = { Text(when (mode) { AppearanceMode.SYSTEM -> "Системная"; AppearanceMode.LIGHT -> "Светлая"; AppearanceMode.DARK -> "Тёмная" }) },
+                    label = {
+                        Text(
+                            when (mode) {
+                                AppearanceMode.SYSTEM -> "Системная"
+                                AppearanceMode.LIGHT -> "Светлая"
+                                AppearanceMode.DARK -> "Тёмная"
+                            },
+                        )
+                    },
                 )
             }
         }
         item { Text("Обновления", style = MaterialTheme.typography.titleLarge) }
-        item { Text("Версия " + BuildConfig.VERSION_NAME + " · " + when (update.availability) { UpdateAvailability.FAILED -> "Ошибка проверки"; UpdateAvailability.AVAILABLE -> "Есть обновление"; UpdateAvailability.UP_TO_DATE -> "Последняя версия"; else -> "Не проверено" }) }
-        update.lastCheckedAtEpochMs?.let { checked -> item { Text("Последняя проверка: " + formatLocalDate(checked)) } }
+        item {
+            Text(
+                "Версия " + BuildConfig.VERSION_NAME + " · " +
+                    when (update.availability) {
+                        UpdateAvailability.FAILED -> "Ошибка проверки"
+                        UpdateAvailability.AVAILABLE -> "Есть обновление"
+                        UpdateAvailability.UP_TO_DATE -> "Последняя версия"
+                        else -> "Не проверено"
+                    },
+            )
+        }
+        update.lastCheckedAtEpochMs?.let { checked ->
+            item {
+                Text(
+                    "Последняя проверка: " + formatLocalDate(checked),
+                )
+            }
+        }
         update.failure?.let {
             item {
                 Text(
