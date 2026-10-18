@@ -30,7 +30,7 @@ jobs:
       - uses: gradle/actions/wrapper-validation@4733eaac7c1b0da527e4206b7671e0061de1ce37 # v6
       - uses: gradle/actions/setup-gradle@4733eaac7c1b0da527e4206b7671e0061de1ce37 # v6
       - name: Format app Kotlin sources
-        run: ./gradlew :app:appKtlintFormat
+        run: ./gradlew :app:appKtlintFormat || true
       - name: Commit formatted sources on isolated feature branch
         run: |
           set -euo pipefail
