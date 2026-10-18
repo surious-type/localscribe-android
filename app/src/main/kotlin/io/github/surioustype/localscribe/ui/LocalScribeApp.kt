@@ -287,10 +287,12 @@ private fun Onboarding(done: () -> Unit) =
                 style = MaterialTheme.typography.headlineMedium,
             )
             Text(
-                "LocalScribe распознаёт речь полностью офлайн. Интернет нужен только для скачивания моделей и проверки обновлений.",
+                "LocalScribe распознаёт речь полностью офлайн. Интернет нужен " +
+                    "только для скачивания моделей и проверки обновлений.",
             )
             Text(
-                "Для начала рекомендуем мультиязычную модель Small. Вы сами выбираете, какие модели скачивать.",
+                "Для начала рекомендуем мультиязычную модель Small. " +
+                    "Вы сами выбираете, какие модели скачивать.",
             )
             Button(
                 onClick = done,
@@ -1117,7 +1119,11 @@ private fun TranscriptScreen(
                             }
                         }) {
                             Icon(
-                                if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                if (playback.isPlaying) {
+                                    Icons.Default.Pause
+                                } else {
+                                    Icons.Default.PlayArrow
+                                },
                                 contentDescription = null,
                             )
                             Text(if (playback.isPlaying) "Пауза" else "Воспроизвести")
@@ -1442,7 +1448,8 @@ private fun Models(
                                             ),
                                         )
                                         uiModel.setBenchmarkStatus(
-                                            "Quality: WER ${(result.score.wordErrorRate * 100).toInt()}%, CER ${(result.score.characterErrorRate * 100).toInt()}%",
+                                            "Качество: WER " + (result.score.wordErrorRate * 100).toInt() +
+                                                "%, CER " + (result.score.characterErrorRate * 100).toInt() + "%",
                                         )
                                     }.onFailure {
                                         uiModel.setBenchmarkStatus(
@@ -1820,12 +1827,14 @@ private fun Settings(
         installReturnMessage?.let { item { Text(it) } }
         item {
             Text(
-                "Конфиденциальность: записи и тексты остаются на телефоне. Облачная транскрибация и аналитика не используются.",
+                "Конфиденциальность: записи и тексты остаются на телефоне. " +
+                    "Облачная транскрибация и аналитика не используются.",
             )
         }
         item {
             Text(
-                "Whisper.cpp распространяется с приложенной лицензией. Сведения о тестовых аудиофайлах доступны в документации.",
+                "Whisper.cpp распространяется с приложенной лицензией. " +
+                    "Сведения о тестовых аудиофайлах доступны в документации.",
             )
         }
     }
