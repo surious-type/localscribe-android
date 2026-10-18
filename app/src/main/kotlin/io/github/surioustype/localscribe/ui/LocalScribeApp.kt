@@ -1447,10 +1447,9 @@ private fun Models(
                                                     }.orEmpty(),
                                             ),
                                         )
-                                        uiModel.setBenchmarkStatus(
-                                            "Качество: WER " + (result.score.wordErrorRate * 100).toInt() +
-                                                "%, CER " + (result.score.characterErrorRate * 100).toInt() + "%",
-                                        )
+                                        val wer = (result.score.wordErrorRate * 100).toInt()
+                                        val cer = (result.score.characterErrorRate * 100).toInt()
+                                        uiModel.setBenchmarkStatus("Качество: WER $wer%, CER $cer%")
                                     }.onFailure {
                                         uiModel.setBenchmarkStatus(
                                             "Quality demo did not complete",
