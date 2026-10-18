@@ -627,7 +627,10 @@ private fun SourceControls(
                     cancelJob = { graph.coordinator.cancel(id) },
                 )
             ) {
-                TranscriptionStartResult.STARTED -> close()
+                TranscriptionStartResult.STARTED -> {
+                    close()
+                    uiModel.selectDestination(Destination.PROCESSING.name)
+                }
                 TranscriptionStartResult.SERVICE_START_FAILED ->
                     uiModel.setSourceSetup(
                         selectedModel,
@@ -655,55 +658,128 @@ private fun SourceControls(
                 )
             }
         }
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Transcription setup", style = MaterialTheme.typography.titleMedium)
-            if (installedModelIds.isEmpty()) {
-                Text(
-                    "Install a transcription model before starting.",
-                    color = MaterialTheme.colorScheme.error,
-                )
-            }
-            installedModelIds.forEach { id ->
-                FilterChip(selected = selectedModel == id, onClick = {
-                    uiModel.setSourceSetup(id, language, null)
-                }, label = { Text(id) })
-            }
-            FilterChip(
-                selected = selectedVad == null,
-                onClick = { uiModel.setSourceSetup(selectedModel, language, null, null) },
-                label = { Text("VAD off") },
-            )
-            vadModels.forEach { vad ->
-                FilterChip(
-                    selected = selectedVad == vad.descriptorId,
-                    onClick = {
-                        uiModel.setSourceSetup(selectedModel, language, null, vad.descriptorId)
-                    },
-                    label = { Text("Use ${vad.displayName} VAD") },
-                )
-            }
-            OutlinedTextField(value = language, onValueChange = {
-                uiModel.setSourceSetup(selectedModel, it, null)
-            }, label = { Text("Language (auto, en, ru…)") })
-            ResponsiveActionButtons(
-                labels = listOf("Start transcription"),
-                enabled = { selectedModel != null },
+    var sourceName by remember { mutableStateOf("Аудиозапись") }
+    LaunchedEffect(sourceId) {
+        sourceName = graph.audioRepository.getSource(sourceId)?.source?.displayName ?: "Аудиозапись"
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+        Card(colors = localScribeCardColors(), shape = localScribeShape) {
+            Row(
+                Modifier.fillMaxWidth().padding(18.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                Icon(Icons.Default.Mic, contentDescription = null)
+                Column {
+                    Text(sourceName, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Вся обработка выполняется на телефоне",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Text("Модель распознавания", style = MaterialTheme.typography.titleMedium)
+        if (installedModelIds.isEmpty()) {
+            Text("Сначала скачайте модель во вкладке «Модели».")
+        }
+        transcriptionModels.forEach { model ->
+            val active = selectedModel == model.descriptorId
+            Card(
+                shape = localScribeShape,
+                colors = localScribeCardColors(),
+                modifier = Modifier.fillMaxWidth().clickable {
+                    uiModel.setSourceSetup(model.descriptorId, language, null)
+                },
+            ) {
+                Row(
+                    Modifier.fillMaxWidth().padding(14.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    androidx.compose.material3.RadioButton(
+                        selected = active,
+                        onClick = { uiModel.setSourceSetup(model.descriptorId, language, null) },
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            model.displayName,
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            if (model.descriptorId == "small") {
+                                "Рекомендуется для начала · хорошее качество"
+                            } else {
+                                "Установлена · " + (model.bytes / (1_024 * 1_024)) + " МБ"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+        }
+        Text("Язык записи", style = MaterialTheme.typography.titleMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("auto" to "Авто", "ru" to "Русский", "en" to "English")
+                .forEach { (value, label) ->
+                    FilterChip(
+                        selected = language == value,
+                        onClick = { uiModel.setSourceSetup(selectedModel, value, null) },
+                        label = { Text(label) },
+                    )
+                }
+        }
+        Card(colors = localScribeCardColors(), shape = localScribeShape) {
+            Row(
+                Modifier.fillMaxWidth().padding(16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text("Определение речи (VAD)")
+                    Text(
+                        "Помогает пропускать тишину и уменьшать ложные фразы",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                }
+                Switch(
+                    checked = selectedVad != null,
+                    onCheckedChange = { enabled ->
+                        uiModel.setSourceSetup(
+                            selectedModel,
+                            language,
+                            null,
+                            if (enabled) vadModels.firstOrNull()?.descriptorId else null,
+                        )
+                    },
+                    enabled = vadModels.isNotEmpty(),
+                )
+            }
+        }
+        if (vadModels.isEmpty()) {
+            Text(
+                "Для определения речи можно скачать Silero VAD во вкладке «Модели».",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        Button(
+            onClick = {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                     ContextCompat.checkSelfPermission(
                         context,
                         Manifest.permission.POST_NOTIFICATIONS,
-                    ) !=
-                    android.content.pm.PackageManager.PERMISSION_GRANTED
+                    ) != android.content.pm.PackageManager.PERMISSION_GRANTED
                 ) {
                     notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 } else {
                     beginTranscription()
                 }
-            }
-            message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+            },
+            enabled = selectedModel != null,
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Text("Начать транскрибацию")
         }
+        message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        Spacer(Modifier.height(16.dp))
     }
 }
 
