@@ -24,19 +24,19 @@ class MainActivityTest {
     }
 
     @Test fun onboardingExplainsOfflinePrivacy() {
-        rule.onNodeWithText("Your recordings stay on this device").assertIsDisplayed()
-        rule.onNodeWithText("Continue").performClick()
+        rule.onNodeWithText("Ваши записи остаются на вашем устройстве").assertIsDisplayed()
+        rule.onNodeWithText("Начать").performClick()
         rule.onNodeWithText("LocalScribe").assertIsDisplayed()
     }
 
     @Test fun navigationShowsModelsAndSettings() {
-        rule.onNodeWithText("Continue").performClick()
-        rule.onNodeWithText("Models").performClick()
+        rule.onNodeWithText("Начать").performClick()
+        rule.onNodeWithText("Модели").performClick()
         rule
             .onNodeWithText(
-                "Models stay outside the APK and download only when you request them.",
+                "Модели работают локально и скачиваются только по вашему запросу.",
             ).assertIsDisplayed()
-        rule.onNodeWithText("Settings").performClick()
-        rule.onNodeWithText("Automatic update checks").assertIsDisplayed()
+        rule.onNodeWithText("Настройки").performClick()
+        rule.onNodeWithText("Проверять обновления автоматически").assertIsDisplayed()
     }
 }
