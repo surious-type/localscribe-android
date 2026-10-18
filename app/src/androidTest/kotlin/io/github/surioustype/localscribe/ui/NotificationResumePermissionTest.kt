@@ -55,7 +55,7 @@ class NotificationResumePermissionTest {
                 .commit()
         }
         rule.activityRule.scenario.recreate()
-        rule.onNodeWithText("Audio").assertIsDisplayed()
+        rule.onNodeWithText("Ваши записи").assertIsDisplayed()
     }
 
     @Test
@@ -108,10 +108,11 @@ class NotificationResumePermissionTest {
     }
 
     private fun tapNewestResume() {
+        rule.onNodeWithText("Обработка").performClick()
         rule.waitUntil(
             5_000,
-        ) { rule.onAllNodesWithText("Resume").fetchSemanticsNodes().isNotEmpty() }
-        rule.onAllNodesWithText("Resume").onFirst().performClick()
+        ) { rule.onAllNodesWithText("Продолжить").fetchSemanticsNodes().isNotEmpty() }
+        rule.onAllNodesWithText("Продолжить").onFirst().performClick()
     }
 
     private fun clickPermissionOption(matches: (String) -> Boolean) {
