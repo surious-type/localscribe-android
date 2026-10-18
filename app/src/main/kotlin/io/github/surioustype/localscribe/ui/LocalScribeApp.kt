@@ -819,12 +819,12 @@ private fun JobRow(
                 }
             }
         }
-    val totalDuration = chunks.sumOf { it.endMs - it.startMs }.coerceAtLeast(1L)
-    val completedDuration =
-        chunks.filter { it.status.name == "COMPLETED" }.sumOf {
-            it.endMs -
-                it.startMs
-        }
+    val totalDuration = (chunks.maxOfOrNull { it.endMs } ?: 0L).coerceAtLeast(1L)
+    val completedDuration = chunks.filter {
+        it.status.name == "COMPLETED"
+    }.maxOfOrNull { it.endMs } ?: 0L
+    val savedSegments by graph.transcriptionRepository
+        .observeSegments(job.id).collectAsStateWithLifecycle(emptyList())
     Card(
         Modifier.fillMaxWidth(),
         colors = localScribeCardColors(),
@@ -842,7 +842,9 @@ private fun JobRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             LocalScribeProgress(
-                progress = completedDuration.toFloat() / totalDuration.toFloat(),
+                progress =
+                    if (job.status == JobStatus.RUNNING && completedDuration == 0L) null
+                    else completedDuration.toFloat() / totalDuration.toFloat(),
             )
             if (job.status == JobStatus.RUNNING) {
                 val elapsed = (now - job.updatedAtEpochMs).coerceAtLeast(0L)
@@ -856,6 +858,18 @@ private fun JobRow(
                     " / " + formatAudioDuration(totalDuration),
                 style = MaterialTheme.typography.bodySmall,
             )
+            if (savedSegments.isNotEmpty()) {
+                Text(
+                    "Уже распознано",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    savedSegments.takeLast(3).joinToString(" ") { it.text },
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             job.failure?.let {
                 Text(
                     userFacingFailure(it.code.name),
