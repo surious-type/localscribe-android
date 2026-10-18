@@ -100,6 +100,7 @@ import io.github.surioustype.localscribe.service.TranscriptionService
 import io.github.surioustype.localscribe.ui.playback.AndroidMediaPlayerBackend
 import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackController
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import java.util.UUID
 
 private enum class Destination { HOME, PROCESSING, MODELS, SETTINGS }
@@ -705,8 +706,16 @@ private fun JobRow(
     graph: AppGraph,
     context: Context,
     showTranscript: () -> Unit,
+    sourceName: String? = null,
 ) {
     val scope = rememberCoroutineScope()
+    var now by remember { mutableStateOf(System.currentTimeMillis()) }
+    LaunchedEffect(job.status) {
+        while (job.status == JobStatus.RUNNING) {
+            delay(1_000)
+            now = System.currentTimeMillis()
+        }
+    }
     val chunks by graph.transcriptionRepository
         .observeChunks(
             job.id,
@@ -733,10 +742,37 @@ private fun JobRow(
             it.endMs -
                 it.startMs
         }
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp)) {
-            Text("${job.config.modelId} · ${job.status.name.lowercase()}")
-            Text("${(completedDuration * 100 / totalDuration)}% complete")
+    Card(
+        Modifier.fillMaxWidth(),
+        colors = localScribeCardColors(),
+        shape = localScribeShape,
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(9.dp)) {
+            Text(
+                sourceName ?: "Аудиозапись",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
+            Text(
+                job.config.modelId + " · " + localizedJobStatus(job.status.name),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            LocalScribeProgress(
+                progress = completedDuration.toFloat() / totalDuration.toFloat(),
+            )
+            if (job.status == JobStatus.RUNNING) {
+                val elapsed = (now - job.updatedAtEpochMs).coerceAtLeast(0L)
+                Text(
+                    "Текущий запуск: " + formatAudioDuration(elapsed),
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+            Text(
+                "Обработано: " + formatAudioDuration(completedDuration) +
+                    " / " + formatAudioDuration(totalDuration),
+                style = MaterialTheme.typography.bodySmall,
+            )
             job.failure?.let {
                 Text(
                     userFacingFailure(it.code.name),
@@ -749,7 +785,7 @@ private fun JobRow(
                 ) {
                     OutlinedButton(
                         onClick = { scope.launch { graph.coordinator.pause(job.id) } },
-                    ) { Text("Pause") }
+                    ) { Text("Пауза") }
                 }
                 if (job.status == JobStatus.PAUSED || job.status == JobStatus.PENDING) {
                     val resume: () -> Unit = {
@@ -798,7 +834,7 @@ private fun JobRow(
                         } else {
                             resume()
                         }
-                    }) { Text("Resume") }
+                    }) { Text("Продолжить") }
                     if (job.failure?.code?.name in
                         setOf("SOURCE_PERMISSION_REQUIRED", "SOURCE_MISSING")
                     ) {
@@ -811,12 +847,10 @@ private fun JobRow(
                 if (job.status in setOf(JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED)) {
                     OutlinedButton(
                         onClick = { scope.launch { graph.coordinator.cancel(job.id) } },
-                    ) { Text("Stop") }
+                    ) { Text("Остановить") }
                 }
-                if (job.status ==
-                    JobStatus.COMPLETED
-                ) {
-                    OutlinedButton(onClick = showTranscript) { Text("Transcript") }
+                if (job.status in setOf(JobStatus.COMPLETED, JobStatus.RUNNING, JobStatus.PAUSED)) {
+                    OutlinedButton(onClick = showTranscript) { Text("Текст") }
                 }
             }
             actionMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
