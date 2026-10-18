@@ -11,7 +11,7 @@ class AppPreferences(context: Context) {
         get() = values.getBoolean("automatic_updates", true)
         set(value) = values.edit().putBoolean("automatic_updates", value).apply()
     var dynamicColors: Boolean
-        get() = values.getBoolean("dynamic_colors", true)
+        get() = values.getBoolean("dynamic_colors", false)
         set(value) = values.edit().putBoolean("dynamic_colors", value).apply()
     var darkTheme: Boolean
         get() = values.getBoolean("dark_theme", false)
