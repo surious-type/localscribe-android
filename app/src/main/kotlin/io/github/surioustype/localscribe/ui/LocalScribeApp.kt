@@ -925,7 +925,8 @@ private fun TranscriptScreen(
     val save =
         rememberLauncherForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
-        ) { uri ->
+        ) { result ->
+            val uri = result.data?.data
             val format =
                 pendingExportFormat?.let { value ->
                     ExportFormat.entries.firstOrNull {
