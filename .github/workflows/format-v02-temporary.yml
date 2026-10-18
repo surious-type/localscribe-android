@@ -1,0 +1,43 @@
+name: Temporary v0.2 source formatter
+
+on:
+  push:
+    branches:
+      - feat/localscribe-v02-ui
+
+permissions:
+  contents: write
+
+concurrency:
+  group: format-v02
+  cancel-in-progress: false
+
+jobs:
+  apply-format:
+    if: github.repository == 'surious-type/localscribe-android'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Configure Android SDK
+        run: |
+          sdkmanager="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$sdkmanager" --licenses
+          "$sdkmanager" --install 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;30.0.16248370' 'cmake;4.1.2'
+      - uses: gradle/actions/wrapper-validation@4733eaac7c1b0da527e4206b7671e0061de1ce37 # v6
+      - uses: gradle/actions/setup-gradle@4733eaac7c1b0da527e4206b7671e0061de1ce37 # v6
+      - name: Format app Kotlin sources
+        run: ./gradlew :app:appKtlintFormat
+      - name: Commit formatted sources on isolated feature branch
+        run: |
+          set -euo pipefail
+          git add -u -- app/src
+          if ! git diff --cached --quiet; then
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git commit -m 'style(ui): apply Kotlin formatting'
+            git push origin HEAD:feat/localscribe-v02-ui
+          fi
