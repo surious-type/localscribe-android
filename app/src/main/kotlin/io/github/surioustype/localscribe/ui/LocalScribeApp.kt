@@ -275,23 +275,23 @@ private fun Onboarding(done: () -> Unit) =
             verticalArrangement = Arrangement.spacedBy(18.dp),
         ) {
             Text(
-                "Your recordings stay on this device",
+                "Ваши записи остаются на вашем устройстве",
                 style = MaterialTheme.typography.headlineMedium,
             )
             Text(
-                "LocalScribe transcribes audio offline. Internet is used only when you choose to download a Whisper model or check for an app update.",
+                "LocalScribe распознаёт речь полностью офлайн. Интернет нужен только для скачивания моделей и проверки обновлений.",
             )
             Text(
-                "Download a multilingual Small model for a balanced first transcription. Models are never included in the APK and are never downloaded automatically.",
+                "Для начала рекомендуем мультиязычную модель Small. Вы сами выбираете, какие модели скачивать.",
             )
             Button(
                 onClick = done,
                 modifier =
                     Modifier.semantics {
                         contentDescription =
-                            "Finish onboarding"
+                            "Завершить ознакомление"
                     },
-            ) { Text("Continue") }
+            ) { Text("Начать") }
         }
     }
 
@@ -1648,16 +1648,16 @@ private fun Settings(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Text("Settings", style = MaterialTheme.typography.headlineSmall) }
+        item { Text("Внешний вид", style = MaterialTheme.typography.headlineMedium) }
         item {
-            PreferenceSwitch("Automatic update checks", automatic) {
+            PreferenceSwitch("Проверять обновления автоматически", automatic) {
                 automatic = it
                 preferences.automaticUpdates =
                     it
             }
         }
         item {
-            PreferenceSwitch("Use dynamic colors", dynamic) {
+            PreferenceSwitch("Динамические цвета", dynamic) {
                 dynamic = it
                 preferences.dynamicColors =
                     it
@@ -1665,7 +1665,7 @@ private fun Settings(
             }
         }
         item {
-            Text("Theme")
+            Text("Тема")
             AppearanceMode.entries.forEach { mode ->
                 FilterChip(
                     selected = appearanceMode == mode,
@@ -1674,17 +1674,17 @@ private fun Settings(
                         preferences.appearanceMode = mode.name
                         setAppearanceMode(mode)
                     },
-                    label = { Text(mode.name.lowercase().replaceFirstChar(Char::uppercase)) },
+                    label = { Text(when (mode) { AppearanceMode.SYSTEM -> "Системная"; AppearanceMode.LIGHT -> "Светлая"; AppearanceMode.DARK -> "Тёмная" }) },
                 )
             }
         }
-        item { Text("Updates", style = MaterialTheme.typography.titleLarge) }
-        item { Text("App version ${BuildConfig.VERSION_NAME} · ${presentation.status}") }
-        update.lastCheckedAtEpochMs?.let { checked -> item { Text("Last checked: $checked") } }
+        item { Text("Обновления", style = MaterialTheme.typography.titleLarge) }
+        item { Text("Версия " + BuildConfig.VERSION_NAME + " · " + when (update.availability) { UpdateAvailability.FAILED -> "Ошибка проверки"; UpdateAvailability.AVAILABLE -> "Есть обновление"; UpdateAvailability.UP_TO_DATE -> "Последняя версия"; else -> "Не проверено" }) }
+        update.lastCheckedAtEpochMs?.let { checked -> item { Text("Последняя проверка: " + formatLocalDate(checked)) } }
         update.failure?.let {
             item {
                 Text(
-                    "Update check failed. Try again when online.",
+                    "Не удалось проверить обновления. Проверьте подключение к интернету.",
                     color = MaterialTheme.colorScheme.error,
                 )
             }
@@ -1694,14 +1694,14 @@ private fun Settings(
                 scope.launch {
                     graph.updates.checkForUpdate(AppVersion(BuildConfig.VERSION_NAME), force = true)
                 }
-            }) { Text("Check now") }
+            }) { Text("Проверить сейчас") }
         }
         presentation.releaseNotes?.let { notes -> item { Text(notes) } }
         if (presentation.canDownload) {
             item {
                 Button(onClick = {
                     scope.launch { graph.updates.downloadAvailableUpdate() }
-                }) { Text("Download verified update") }
+                }) { Text("Скачать обновление") }
             }
         }
         item {
@@ -1718,18 +1718,18 @@ private fun Settings(
                         Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
                         !context.packageManager.canRequestPackageInstalls()
                     scope.launch { graph.updates.requestInstall() }
-                }) { Text("Install update") }
+                }) { Text("Установить обновление") }
             }
         }
         installReturnMessage?.let { item { Text(it) } }
         item {
             Text(
-                "Privacy: audio and transcripts remain on this device. No analytics or cloud transcription are used.",
+                "Конфиденциальность: записи и тексты остаются на телефоне. Облачная транскрибация и аналитика не используются.",
             )
         }
         item {
             Text(
-                "Whisper.cpp is distributed under its bundled license. Demo fixture provenance and rights are shown in the quality demo manifest.",
+                "Whisper.cpp распространяется с приложенной лицензией. Сведения о тестовых аудиофайлах доступны в документации.",
             )
         }
     }
