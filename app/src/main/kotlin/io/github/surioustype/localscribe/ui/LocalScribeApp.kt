@@ -24,9 +24,16 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -917,7 +924,7 @@ private fun TranscriptScreen(
     val playback by player.state.collectAsStateWithLifecycle()
     val save =
         rememberLauncherForActivityResult(
-            ActivityResultContracts.CreateDocument("text/plain"),
+            ActivityResultContracts.StartActivityForResult(),
         ) { uri ->
             val format =
                 pendingExportFormat?.let { value ->
@@ -955,86 +962,207 @@ private fun TranscriptScreen(
     }
     val filtered =
         remember(segments, query) { segments.filter { it.text.contains(query, ignoreCase = true) } }
-    Card(Modifier.fillMaxWidth()) {
-        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Transcript", style = MaterialTheme.typography.titleLarge)
-                OutlinedButton(onClick = close) { Text("Close") }
-            }
-            OutlinedTextField(query, setQuery, label = {
-                Text("Search transcript")
-            }, modifier = Modifier.fillMaxWidth())
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = {
-                    scope.launch {
-                        val source =
-                            job?.let { graph.audioRepository.getSource(it.sourceId)?.source }
-                                ?: return@launch
-                        if (playback.isPlaying) player.pause() else player.play(source.uri)
-                    }
-                }) { Text(if (playback.isPlaying) "Pause audio" else "Play audio") }
-            }
-            OutlinedButton(onClick = {
-                clipboard.setText(
-                    AnnotatedString(
-                        segments.joinToString("\n") {
-                            it.text
-                        },
-                    ),
-                )
-            }) { Text("Copy transcript") }
-            ExportFormat.entries.forEach { format ->
-                OutlinedButton(onClick = {
-                    setExportFormat(format.name)
-                    save.launch("transcript.${format.name.lowercase()}")
-                }) { Text("Export ${format.name}") }
-            }
-            Slider(
-                value = playback.positionMs.toFloat(),
-                onValueChange = { position ->
-                    sourceUri?.let { player.seekTo(it, position.toLong()) }
-                },
-                valueRange = 0f..playback.durationMs.coerceAtLeast(1L).toFloat(),
-                modifier =
-                    Modifier.fillMaxWidth().semantics {
-                        contentDescription = "Playback position"
-                    },
+    var showExport by remember { mutableStateOf(false) }
+    LaunchedEffect(sourceUri) {
+        sourceUri?.let { player.seekTo(it, 0L) }
+    }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item {
+            Text(
+                "Расшифровка записи",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.SemiBold,
             )
-            Text("${timestamp(playback.positionMs)}")
-            filtered.forEach { segment ->
-                Text(
-                    "${timestamp(segment.absoluteStartMs)}  ${segment.text}",
-                    modifier =
-                        Modifier.fillMaxWidth().clickable {
+        }
+        item {
+            Card(shape = localScribeShape, colors = localScribeCardColors()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text("Оригинальная запись", style = MaterialTheme.typography.titleMedium)
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = {
                             scope.launch {
-                                job?.let { active ->
-                                    graph.audioRepository
-                                        .getSource(
-                                            active.sourceId,
-                                        )?.source
-                                        ?.uri
-                                        ?.let {
-                                            player.seekTo(it, segment.absoluteStartMs)
-                                        }
-                                }
+                                val source = job?.let {
+                                    graph.audioRepository.getSource(it.sourceId)?.source
+                                } ?: return@launch
+                                if (playback.isPlaying) player.pause() else player.play(source.uri)
                             }
+                        }) {
+                            Icon(
+                                if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                                contentDescription = null,
+                            )
+                            Text(if (playback.isPlaying) "Пауза" else "Воспроизвести")
+                        }
+                    }
+                    Slider(
+                        value = playback.positionMs.coerceIn(
+                            0L,
+                            playback.durationMs.coerceAtLeast(1L),
+                        ).toFloat(),
+                        onValueChange = { position ->
+                            sourceUri?.let { player.seekTo(it, position.toLong()) }
                         },
-                )
-            }
-            playback.errorMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            Button(onClick = {
-                scope.launch {
-                    val source =
-                        job?.let { graph.audioRepository.getSource(it.sourceId)?.source }
-                            ?: return@launch
-                    runCatching {
-                        TranscriptExporter(
-                            context,
-                        ).share(source, segments, ExportFormat.TXT)
-                    }.onSuccess { setStatus("Transcript shared") }
-                        .onFailure { setStatus("Transcript share failed") }
+                        valueRange = 0f..playback.durationMs.coerceAtLeast(1L).toFloat(),
+                        modifier = Modifier.fillMaxWidth().semantics {
+                            contentDescription = "Позиция воспроизведения"
+                        },
+                    )
+                    Text(
+                        formatAudioDuration(playback.positionMs) + " / " +
+                            formatAudioDuration(playback.durationMs),
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    playback.errorMessage?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                    }
                 }
-            }) { Text("Share TXT") }
+            }
+        }
+        item {
+            OutlinedTextField(
+                query,
+                setQuery,
+                label = { Text("Поиск по тексту") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+            )
+        }
+        if (segments.isEmpty()) {
+            item {
+                Card(shape = localScribeShape, colors = localScribeCardColors()) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(22.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        Text(
+                            if (job?.status == JobStatus.COMPLETED) "Речь не обнаружена"
+                            else "Текст пока не готов",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
+                        Text(
+                            if (job?.status == JobStatus.COMPLETED) {
+                                "Обработка завершилась, но распознанных фрагментов нет. " +
+                                    "Попробуйте другую модель или проверьте, есть ли речь в аудио."
+                            } else {
+                                "Распознанные фрагменты появятся здесь по мере " +
+                                    "завершения обработки частей записи."
+                            },
+                        )
+                    }
+                }
+            }
+        } else if (filtered.isEmpty()) {
+            item { Text("По запросу ничего не найдено.") }
+        }
+        items(filtered, key = { it.id }) { segment ->
+            Card(
+                colors = localScribeCardColors(),
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().clickable {
+                    scope.launch {
+                        val uri = job?.let {
+                            graph.audioRepository.getSource(it.sourceId)?.source?.uri
+                        }
+                        uri?.let { player.seekTo(it, segment.absoluteStartMs) }
+                    }
+                },
+            ) {
+                Column(
+                    Modifier.fillMaxWidth().padding(14.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                ) {
+                    Text(
+                        formatAudioDuration(segment.absoluteStartMs),
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Text(segment.text, style = MaterialTheme.typography.bodyLarge)
+                }
+            }
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    clipboard.setText(AnnotatedString(segments.joinToString("\n") { it.text }))
+                }, enabled = segments.isNotEmpty()) {
+                    Text("Копировать")
+                }
+                Button(onClick = { showExport = true }) {
+                    Icon(Icons.Default.FileDownload, contentDescription = null)
+                    Text("Экспорт")
+                }
+            }
+        }
+        item {
+            OutlinedButton(
+                onClick = {
+                    scope.launch {
+                        val source = job?.let {
+                            graph.audioRepository.getSource(it.sourceId)?.source
+                        } ?: return@launch
+                        runCatching {
+                            TranscriptExporter(context).share(source, segments, ExportFormat.TXT)
+                        }.onSuccess { setStatus("Текст отправлен") }
+                            .onFailure { setStatus("Не удалось поделиться текстом") }
+                    }
+                },
+                enabled = segments.isNotEmpty(),
+            ) {
+                Icon(Icons.Default.Share, contentDescription = null)
+                Text("Поделиться")
+            }
+        }
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+    if (showExport) {
+        ModalBottomSheet(onDismissRequest = { showExport = false }) {
+            Column(
+                Modifier.fillMaxWidth().padding(24.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text("Экспортировать текст", style = MaterialTheme.typography.titleLarge)
+                ExportFormat.entries.forEach { format ->
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = segments.isNotEmpty(),
+                        onClick = {
+                            showExport = false
+                            setExportFormat(format.name)
+                            val (extension, mime) = when (format) {
+                                ExportFormat.TXT -> "txt" to "text/plain"
+                                ExportFormat.MARKDOWN -> "md" to "text/markdown"
+                                ExportFormat.SRT -> "srt" to "application/x-subrip"
+                                ExportFormat.VTT -> "vtt" to "text/vtt"
+                                ExportFormat.JSON -> "json" to "application/json"
+                            }
+                            val intent =
+                                Intent(Intent.ACTION_CREATE_DOCUMENT)
+                                    .addCategory(Intent.CATEGORY_OPENABLE)
+                                    .setType(mime)
+                                    .putExtra(
+                                        Intent.EXTRA_TITLE,
+                                        "localscribe-transcript." + extension,
+                                    )
+                            save.launch(intent)
+                        },
+                    ) {
+                        Text(
+                            when (format) {
+                                ExportFormat.MARKDOWN -> "Markdown (.md)"
+                                else -> format.name + " (." + format.name.lowercase() + ")"
+                            },
+                        )
+                    }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
         }
     }
 }
