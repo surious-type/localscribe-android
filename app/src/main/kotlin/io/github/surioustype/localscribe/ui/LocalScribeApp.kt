@@ -26,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
@@ -340,71 +341,197 @@ private fun Home(
         }
         ; graph.audioRepository.refresh()
     }
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Audio", style = MaterialTheme.typography.headlineSmall) }
-        item {
-            ResponsiveActionButtons(listOf("Import file", "Show recordings")) { action ->
-                when (action) {
-                    "Import file" -> picker.launch(arrayOf("audio/*"))
-                    "Show recordings" -> permission.launch(mediaPermission)
+    var query by remember { mutableStateOf("") }
+    var filter by remember { mutableStateOf("all") }
+    var sort by remember { mutableStateOf("new") }
+    val visible = sources.filter { item ->
+        item.source.displayName.contains(query, ignoreCase = true) &&
+            when (filter) {
+                "ready" -> jobs.any {
+                    it.sourceId == item.source.id && it.status == JobStatus.COMPLETED
                 }
+                "new" -> jobs.none {
+                    it.sourceId == item.source.id && it.status == JobStatus.COMPLETED
+                }
+                else -> true
+            }
+    }.let { items ->
+        when (sort) {
+            "az" -> items.sortedBy { it.source.displayName.lowercase() }
+            "za" -> items.sortedByDescending { it.source.displayName.lowercase() }
+            "long" -> items.sortedByDescending { it.source.durationMs }
+            "short" -> items.sortedBy { it.source.durationMs }
+            else -> items
+        }
+    }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Text("Ваши записи", style = MaterialTheme.typography.headlineMedium)
+            Spacer(Modifier.height(12.dp))
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier.fillMaxWidth(),
+                placeholder = { Text("Поиск записей…") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                singleLine = true,
+                shape = RoundedCornerShape(18.dp),
+            )
+        }
+        item {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                listOf("all" to "Все", "ready" to "С текстом", "new" to "Без текста")
+                    .forEach { (value, label) ->
+                        FilterChip(
+                            selected = filter == value,
+                            onClick = { filter = value },
+                            label = { Text(label) },
+                        )
+                    }
             }
         }
-        savedUi.statusMessage?.let { item { Text(it, color = MaterialTheme.colorScheme.error) } }
-        items(sources, key = { it.source.id }) { record ->
-            Card(Modifier.fillMaxWidth().clickable { uiModel.selectSource(record.source.id) }) {
-                Column(Modifier.padding(14.dp)) {
-                    Text(record.source.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        item {
+            var menuOpen by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Default.Tune, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
                     Text(
-                        "${record.source.durationMs / 1000}s · ${record.accessStatus.name.lowercase()}",
+                        when (sort) {
+                            "az" -> "По названию А–Я"
+                            "za" -> "По названию Я–А"
+                            "long" -> "Сначала длинные"
+                            "short" -> "Сначала короткие"
+                            else -> "Сначала новые"
+                        },
                     )
                 }
+                androidx.compose.material3.DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                ) {
+                    listOf(
+                        "new" to "Сначала новые",
+                        "az" to "По названию А–Я",
+                        "za" to "По названию Я–А",
+                        "long" to "Сначала длинные",
+                        "short" to "Сначала короткие",
+                    ).forEach { (value, title) ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(title) },
+                            onClick = { sort = value; menuOpen = false },
+                        )
+                    }
+                }
             }
         }
         item {
-            Text(
-                "Jobs",
-                style = MaterialTheme.typography.headlineSmall,
-                modifier = Modifier.padding(top = 12.dp),
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Button(onClick = { picker.launch(arrayOf("audio/*")) }) {
+                    Text("＋ Импорт")
+                }
+                OutlinedButton(onClick = { permission.launch(mediaPermission) }) {
+                    Text("Показать записи")
+                }
+            }
         }
-        items(jobs, key = {
-            it.id
-        }) { job ->
+        savedUi.statusMessage?.let { item { Text(it) } }
+        if (visible.isEmpty()) {
+            item {
+                Card(colors = localScribeCardColors(), shape = localScribeShape) {
+                    Text("Нет записей для выбранного фильтра.", Modifier.padding(20.dp))
+                }
+            }
+        }
+        items(visible, key = { it.source.id }) { record ->
+            val ready = jobs.any {
+                it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
+            }
+            Card(
+                Modifier.fillMaxWidth().clickable { uiModel.selectSource(record.source.id) },
+                colors = localScribeCardColors(),
+                shape = localScribeShape,
+            ) {
+                Row(
+                    Modifier.padding(16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                ) {
+                    Icon(
+                        Icons.Default.Mic,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                        Text(
+                            record.source.displayName,
+                            style = MaterialTheme.typography.titleMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Text(
+                            formatAudioDuration(record.source.durationMs) + " · " +
+                                localizedSourceStatus(record.accessStatus.name),
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        if (ready) {
+                            Text(
+                                "✓ Транскрипция готова",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+
+@Composable
+private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
+    val context = LocalContext.current
+    val jobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
+    val sources by graph.audioRepository.observeSources().collectAsStateWithLifecycle(emptyList())
+    var filter by remember { mutableStateOf("active") }
+    val visible = jobs.filter { job ->
+        when (filter) {
+            "active" -> job.status in setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
+            "done" -> job.status == JobStatus.COMPLETED
+            else -> job.status in setOf(JobStatus.CANCELLED, JobStatus.FAILED)
+        }
+    }
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Text("Задачи", style = MaterialTheme.typography.headlineMedium)
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                listOf("active" to "Активные", "done" to "Готовые", "history" to "История")
+                    .forEach { (value, label) ->
+                        FilterChip(
+                            selected = filter == value,
+                            onClick = { filter = value },
+                            label = { Text(label) },
+                        )
+                    }
+            }
+        }
+        if (visible.isEmpty()) {
+            item {
+                Card(colors = localScribeCardColors(), shape = localScribeShape) {
+                    Text("В этой категории пока нет задач.", Modifier.padding(20.dp))
+                }
+            }
+        }
+        items(visible, key = { it.id }) { job ->
             JobRow(
-                job,
-                graph,
-                context,
+                job = job,
+                graph = graph,
+                context = context,
+                sourceName = sources.firstOrNull { it.source.id == job.sourceId }
+                    ?.source?.displayName,
                 showTranscript = { uiModel.showTranscript(job.id) },
             )
-        }
-        savedUi.selectedSourceId?.let { sourceId ->
-            item {
-                SourceControls(
-                    sourceId,
-                    models,
-                    graph,
-                    context,
-                    uiModel,
-                    savedUi,
-                    close = { uiModel.selectSource(null) },
-                )
-            }
-        }
-        savedUi.transcriptJobId?.let { jobId ->
-            item {
-                TranscriptScreen(
-                    jobId = jobId,
-                    graph = graph,
-                    query = savedUi.transcriptQuery,
-                    pendingExportFormat = savedUi.exportFormat,
-                    setQuery = uiModel::setTranscriptQuery,
-                    setExportFormat = uiModel::setExportFormat,
-                    completeExport = uiModel::completeTranscriptExport,
-                    setStatus = uiModel::setStatusMessage,
-                    close = { uiModel.showTranscript(null) },
-                )
-            }
         }
     }
 }
