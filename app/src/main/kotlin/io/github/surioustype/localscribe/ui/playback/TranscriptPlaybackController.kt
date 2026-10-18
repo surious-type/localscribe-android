@@ -106,7 +106,14 @@ class TranscriptPlaybackController(
         requestedPositionMs = position
         shouldPlayWhenReady = false
         releaseCurrentBackend()
-        mutableState.value = PlaybackState(sourceUri = sourceUri, positionMs = position)
+        mutableState.value =
+            mutableState.value.copy(
+                sourceUri = sourceUri,
+                positionMs = position,
+                isPreparing = false,
+                isReady = false,
+                isPlaying = false,
+            )
     }
 
     override fun close() {
