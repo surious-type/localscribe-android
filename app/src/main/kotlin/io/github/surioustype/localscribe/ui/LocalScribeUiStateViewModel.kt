@@ -2,6 +2,7 @@ package io.github.surioustype.localscribe.ui
 
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -10,6 +11,7 @@ import kotlinx.coroutines.flow.asStateFlow
 class LocalScribeUiStateViewModel(
     private val state: SavedStateHandle,
 ) : ViewModel() {
+    val benchmarkController = BenchmarkRunController(viewModelScope)
     private val mutable =
         MutableStateFlow(
             LocalScribeUiState(
