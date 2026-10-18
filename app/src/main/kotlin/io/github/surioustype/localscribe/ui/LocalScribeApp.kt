@@ -10,6 +10,20 @@ import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -54,6 +68,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -86,7 +101,7 @@ import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackControlle
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-private enum class Destination { HOME, MODELS, SETTINGS }
+private enum class Destination { HOME, PROCESSING, MODELS, SETTINGS }
 
 @Composable
 fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
@@ -115,17 +130,17 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
             when (theme) {
                 ThemeSelection.DYNAMIC_DARK -> dynamicDarkColorScheme(context)
                 ThemeSelection.DYNAMIC_LIGHT -> dynamicLightColorScheme(context)
-                ThemeSelection.DARK -> darkColorScheme()
-                ThemeSelection.LIGHT -> lightColorScheme()
+                ThemeSelection.DARK -> localScribeDarkScheme()
+                ThemeSelection.LIGHT -> localScribeLightScheme()
             }
         } else {
             when (theme) {
                 ThemeSelection.DARK,
                 ThemeSelection.DYNAMIC_DARK,
-                -> darkColorScheme()
+                -> localScribeDarkScheme()
                 ThemeSelection.LIGHT,
                 ThemeSelection.DYNAMIC_LIGHT,
-                -> lightColorScheme()
+                -> localScribeLightScheme()
             }
         }
     MaterialTheme(colorScheme = scheme) {
@@ -143,37 +158,100 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
             runCatching {
                 Destination.valueOf(savedUi.destination)
             }.getOrDefault(Destination.HOME)
+        val detail = savedUi.transcriptJobId != null || savedUi.selectedSourceId != null
+        val title = when {
+            savedUi.transcriptJobId != null -> "Транскрипция"
+            savedUi.selectedSourceId != null -> "Настройка транскрибации"
+            destination == Destination.HOME -> "LocalScribe"
+            destination == Destination.PROCESSING -> "Обработка"
+            destination == Destination.MODELS -> "Модели"
+            else -> "Настройки"
+        }
         Scaffold(
-            topBar = { TopAppBar(title = { Text("LocalScribe") }) },
+            containerColor = MaterialTheme.colorScheme.background,
+            topBar = {
+                TopAppBar(
+                    title = { Text(title, fontWeight = FontWeight.SemiBold) },
+                    navigationIcon = {
+                        if (detail) {
+                            IconButton(onClick = {
+                                if (savedUi.transcriptJobId != null) uiModel.showTranscript(null)
+                                else uiModel.selectSource(null)
+                            }) { Icon(Icons.Default.ArrowBack, contentDescription = "Назад") }
+                        }
+                    },
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                        containerColor = MaterialTheme.colorScheme.background,
+                    ),
+                )
+            },
             bottomBar = {
-                NavigationBar {
-                    Destination.entries.forEach { item ->
-                        NavigationBarItem(selected = destination == item, onClick = {
-                            uiModel.selectDestination(item.name)
-                        }, icon = {}, label = {
-                            Text(
-                                item.name.lowercase().replaceFirstChar(Char::uppercase),
+                if (!detail) {
+                    NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
+                        Destination.entries.forEach { item ->
+                            val icon = when (item) {
+                                Destination.HOME -> Icons.Default.Home
+                                Destination.PROCESSING -> Icons.Default.Mic
+                                Destination.MODELS -> Icons.Default.Folder
+                                Destination.SETTINGS -> Icons.Default.Settings
+                            }
+                            val label = when (item) {
+                                Destination.HOME -> "Записи"
+                                Destination.PROCESSING -> "Обработка"
+                                Destination.MODELS -> "Модели"
+                                Destination.SETTINGS -> "Настройки"
+                            }
+                            NavigationBarItem(
+                                selected = destination == item,
+                                onClick = { uiModel.selectDestination(item.name) },
+                                icon = { Icon(icon, contentDescription = label) },
+                                label = { Text(label) },
                             )
-                        })
+                        }
                     }
                 }
             },
         ) { padding ->
             Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .widthIn(max = 900.dp)
-                    .padding(16.dp),
+                Modifier.fillMaxSize().padding(padding).widthIn(max = 900.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
-                when (destination) {
-                    Destination.HOME -> Home(graph, receivedUri, uiModel, savedUi)
-                    Destination.MODELS -> Models(graph, uiModel, savedUi)
-                    Destination.SETTINGS ->
-                        Settings(graph, preferences, { appearanceMode = it }, {
-                            dynamicColors =
-                                it
-                        })
+                when {
+                    savedUi.transcriptJobId != null ->
+                        TranscriptScreen(
+                            savedUi.transcriptJobId,
+                            graph,
+                            savedUi.transcriptQuery,
+                            savedUi.exportFormat,
+                            uiModel::setTranscriptQuery,
+                            uiModel::setExportFormat,
+                            uiModel::completeTranscriptExport,
+                            uiModel::setStatusMessage,
+                            close = { uiModel.showTranscript(null) },
+                        )
+                    savedUi.selectedSourceId != null -> {
+                        val installed by graph.installedModels.observeInstalledModels()
+                            .collectAsStateWithLifecycle(emptyList())
+                        LazyColumn {
+                            item {
+                                SourceControls(
+                                    savedUi.selectedSourceId,
+                                    installed,
+                                    graph,
+                                    context,
+                                    uiModel,
+                                    savedUi,
+                                    close = { uiModel.selectSource(null) },
+                                )
+                            }
+                        }
+                    }
+                    destination == Destination.HOME -> Home(graph, receivedUri, uiModel, savedUi)
+                    destination == Destination.PROCESSING -> Processing(graph, uiModel)
+                    destination == Destination.MODELS -> Models(graph, uiModel, savedUi)
+                    else -> Settings(graph, preferences, { appearanceMode = it }, {
+                        dynamicColors = it
+                    })
                 }
             }
         }
