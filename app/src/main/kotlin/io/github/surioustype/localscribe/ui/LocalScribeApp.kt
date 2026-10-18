@@ -1257,7 +1257,6 @@ private fun Models(
     savedUi: LocalScribeUiState,
 ) {
     val context = LocalContext.current
-    val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val catalog by graph.catalog.observeCatalog().collectAsStateWithLifecycle(emptyList())
     val downloads by graph.downloads.observeDownloads().collectAsStateWithLifecycle(emptyList())
@@ -1272,22 +1271,11 @@ private fun Models(
     )
     val selected = savedUi.selectedBenchmarkModels
     val status = savedUi.benchmarkStatus
-    val benchmarkController = remember(scope) { BenchmarkRunController(scope) }
+    val benchmarkController = uiModel.benchmarkController
     val qualityResult = savedUi.qualityResult
-    DisposableEffect(lifecycleOwner) {
-        val observer =
-            LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_STOP) benchmarkController.onStop()
-            }
-        lifecycleOwner.lifecycle.addObserver(observer)
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            benchmarkController.onStop()
-        }
-    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Models", style = MaterialTheme.typography.headlineSmall) }
-        item { Text("Models stay outside the APK and download only when you request them.") }
+        item { Text("Выбор модели", style = MaterialTheme.typography.headlineMedium) }
+        item { Text("Модели работают локально и скачиваются только по вашему запросу.") }
         item { Text("Installed model storage: ${installed.sumOf { it.bytes } / (1024 * 1024)} MB") }
         items(
             catalog.filter { it.kind == ModelKind.TRANSCRIPTION },
@@ -1295,12 +1283,28 @@ private fun Models(
         ) { descriptor ->
             val installedModel = installed.firstOrNull { it.descriptorId == descriptor.id }
             val download = downloads.firstOrNull { it.modelId == descriptor.id }
-            Card(Modifier.fillMaxWidth()) {
+            Card(Modifier.fillMaxWidth(), colors = localScribeCardColors(), shape = localScribeShape) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text(descriptor.displayName, style = MaterialTheme.typography.titleMedium)
+                    Text(descriptor.displayName, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.SemiBold)
+                    val qualityLabel = when (descriptor.quality.name) {
+                        "LOW" -> "Для быстрых задач"
+                        "BALANCED" -> "Баланс скорости и качества"
+                        "HIGH" -> "Высокое качество"
+                        else -> "Мультиязычная"
+                    }
                     Text(
-                        "${descriptor.quality.name.lowercase()} · ${descriptor.languages.joinToString()} · ${descriptor.installedBytes / (1024 * 1024)} MB",
+                        qualityLabel + " · " +
+                            (descriptor.installedBytes / (1024 * 1024)) + " МБ",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        style = MaterialTheme.typography.bodySmall,
                     )
+                    if (descriptor.id == "small") {
+                        Text(
+                            "Рекомендуется для начала",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelMedium,
+                        )
+                    }
                     if (installedModel == null) {
                         Button(onClick = {
                             scope.launch {
@@ -1308,9 +1312,9 @@ private fun Models(
                                     uiModel.setBenchmarkStatus("Download could not start")
                                 }
                             }
-                        }) { Text("Download") }
+                        }) { Text("Скачать") }
                     } else {
-                        Text("Installed and SHA-256 verified")
+                        Text("Установлена · проверена SHA-256")
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             Checkbox(selected.contains(descriptor.id), { checked ->
                                 uiModel.setSelectedBenchmarkModels(
@@ -1334,7 +1338,7 @@ private fun Models(
                                         )
                                     }
                                 }
-                            }) { Text("Delete") }
+                            }) { Text("Удалить") }
                             OutlinedButton(onClick = {
                                 benchmarkController.start {
                                     runCatching {
@@ -1378,34 +1382,53 @@ private fun Models(
                                         )
                                     }
                                 }
-                            }) { Text("Quality demo") }
+                            }) { Text("Тест качества") }
                         }
                     }
                     download?.let {
+                        val state = when (it.status.name) {
+                            "DOWNLOADING" -> "Скачивание"
+                            "VERIFYING" -> "Проверка SHA-256"
+                            "QUEUED" -> "В очереди"
+                            "COMPLETED" -> "Готово"
+                            "CANCELLED" -> "Отменено"
+                            "FAILED" -> "Ошибка загрузки"
+                            else -> it.status.name
+                        }
                         Text(
-                            "${it.status.name.lowercase()}: ${it.downloadedBytes / 1024} / ${it.totalBytes / 1024} KiB",
+                            state + " · " + (it.downloadedBytes / (1024 * 1024)) +
+                                " / " + (it.totalBytes / (1024 * 1024)) + " МБ",
+                            style = MaterialTheme.typography.bodySmall,
                         )
+                        if (it.status.name == "DOWNLOADING") {
+                            LocalScribeProgress(
+                                it.downloadedBytes.toFloat() /
+                                    it.totalBytes.coerceAtLeast(1L).toFloat(),
+                            )
+                        } else if (it.status.name == "VERIFYING") {
+                            LocalScribeProgress(null)
+                        }
                     }
                     if (download?.status?.name == "DOWNLOADING" ||
                         download?.status?.name == "VERIFYING"
                     ) {
                         OutlinedButton(onClick = {
                             scope.launch { graph.downloads.cancel(descriptor.id) }
-                        }) { Text("Cancel download") }
+                        }) { Text("Отменить") }
                     }
                     if (download?.status?.name == "FAILED" ||
                         download?.status?.name == "CANCELLED"
                     ) {
                         OutlinedButton(onClick = {
                             scope.launch { graph.downloads.retry(descriptor.id) }
-                        }) { Text("Retry") }
+                        }) { Text("Повторить") }
                     }
                 }
             }
         }
         item {
             Text(
-                "Optional voice activity detection",
+                "Определение голосовой активности",
                 style = MaterialTheme.typography.titleMedium,
             )
         }
@@ -1420,13 +1443,13 @@ private fun Models(
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("${descriptor.displayName} (VAD, optional)")
-                    Text("VAD is never selected as a transcription model.")
+                    Text("Отсекает тишину перед распознаванием, работает вместе с Whisper.")
                     if (installedVad ==
                         null
                     ) {
                         Button(onClick = {
                             scope.launch { graph.downloads.enqueue(descriptor.id) }
-                        }) { Text("Download VAD") }
+                        }) { Text("Скачать VAD") }
                     } else {
                         OutlinedButton(onClick = {
                             scope.launch {
@@ -1436,12 +1459,31 @@ private fun Models(
                                     )
                                 }
                             }
-                        }) { Text("Delete VAD") }
+                        }) { Text("Удалить VAD") }
                     }
                     download?.let {
+                        val state = when (it.status.name) {
+                            "DOWNLOADING" -> "Скачивание"
+                            "VERIFYING" -> "Проверка SHA-256"
+                            "QUEUED" -> "В очереди"
+                            "COMPLETED" -> "Готово"
+                            "CANCELLED" -> "Отменено"
+                            "FAILED" -> "Ошибка загрузки"
+                            else -> it.status.name
+                        }
                         Text(
-                            "${it.status.name.lowercase()}: ${it.downloadedBytes / 1024} / ${it.totalBytes / 1024} KiB",
+                            state + " · " + (it.downloadedBytes / (1024 * 1024)) +
+                                " / " + (it.totalBytes / (1024 * 1024)) + " МБ",
+                            style = MaterialTheme.typography.bodySmall,
                         )
+                        if (it.status.name == "DOWNLOADING") {
+                            LocalScribeProgress(
+                                it.downloadedBytes.toFloat() /
+                                    it.totalBytes.coerceAtLeast(1L).toFloat(),
+                            )
+                        } else if (it.status.name == "VERIFYING") {
+                            LocalScribeProgress(null)
+                        }
                     }
                     if (download?.status?.name == "DOWNLOADING" ||
                         download?.status?.name == "VERIFYING"
@@ -1477,11 +1519,19 @@ private fun Models(
                         )
                     }.onFailure { uiModel.setBenchmarkStatus("Benchmark cancelled or failed") }
                 }
-            }) { Text("Benchmark selected") }
+            }) { Text("Протестировать выбранные модели") }
         }
         item {
             Text(
-                "Benchmark: ${runState.phase.name.lowercase()} ${runState.completedModels}/${runState.totalModels}",
+                "Тест: " + when (runState.phase.name) {
+                    "IDLE" -> if (benchmarkController.isBusy) "Подготовка…" else "Не запущен"
+                    "RUNNING" -> "Обрабатывается " +
+                        (runState.modelId ?: "модель") + " · " +
+                        runState.completedModels + "/" + runState.totalModels
+                    "COMPLETED" -> "Тест завершён"
+                    "CANCELLED" -> "Тест отменён"
+                    else -> "Ошибка тестирования"
+                },
             )
         }
         status?.let { item { Text(it, color = MaterialTheme.colorScheme.primary) } }
@@ -1503,7 +1553,7 @@ private fun Models(
                 "Russian and mixed-language quality demos are unavailable in this bundled fixture manifest.",
             )
         }
-        item { Text("Saved results", style = MaterialTheme.typography.titleMedium) }
+        item { Text("Результаты тестов", style = MaterialTheme.typography.titleMedium) }
         val comparison = latestBenchmarkComparison(benchmarks)
         comparison.reference?.let { reference ->
             item {
@@ -1528,7 +1578,7 @@ private fun Models(
                     benchmarks,
                     AndroidHardwareProfile.read(context),
                 )
-            Text("Recommendations")
+            Text("Рекомендации")
             recommendations.forEach {
                 Text(
                     "${it.modelId}: ${it.level.name.lowercase()} — ${it.reason}",
