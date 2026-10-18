@@ -55,7 +55,11 @@ class AndroidAudioRepository(
         combine(store.observe(), mediaSources) { imported, media ->
             (imported + media)
                 .distinctBy { it.source.id }
-                .sortedBy { it.source.displayName.lowercase() }
+                .sortedWith(
+                    compareByDescending<AudioSourceRecord> { record ->
+                        record.source.id.removePrefix("media:").toLongOrNull() ?: Long.MIN_VALUE
+                    }.thenBy { it.source.displayName.lowercase() },
+                )
         }
 
     override suspend fun refresh() =
