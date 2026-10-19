@@ -1489,6 +1489,16 @@ private fun Models(
     val controller = uiModel.benchmarkController
     var actionModelId by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
+    var pendingDownloads by remember { mutableStateOf(emptySet<String>()) }
+    LaunchedEffect(downloads, installed) {
+        // As soon as an observable transfer or installed model appears,
+        // the durable manager, rather than this short UI latch, owns its state.
+        pendingDownloads =
+            pendingDownloads.filterNot { modelId ->
+                downloads.any { it.modelId == modelId } ||
+                    installed.any { it.descriptorId == modelId }
+            }.toSet()
+    }
     var testElapsed by remember { mutableStateOf(controller.elapsedMs()) }
     LaunchedEffect(controller.isBusy) {
         while (controller.isBusy) {
@@ -1502,8 +1512,13 @@ private fun Models(
         items(catalog.filter { it.kind == ModelKind.TRANSCRIPTION }, key = { it.id }) { model ->
             val saved = installed.firstOrNull { it.descriptorId == model.id }
             val download = downloads.firstOrNull { it.modelId == model.id }
-            val downloading =
-                download?.status?.name in setOf("QUEUED", "DOWNLOADING", "VERIFYING")
+            val transfer =
+                modelCardPresentation(
+                    installed = saved != null,
+                    downloadStatus = download?.status?.name,
+                    requestPending = model.id in pendingDownloads,
+                )
+            val downloading = transfer.busy
             val result =
                 benchmarks.firstOrNull {
                     it.modelId == model.id && it.modelHash.equals(saved?.sha256, true)
@@ -1530,21 +1545,15 @@ private fun Models(
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     Text(
-                        when {
-                            saved != null -> "Установлена и проверена"
-                            download?.status?.name == "QUEUED" -> "Ожидает скачивания"
-                            download?.status?.name == "DOWNLOADING" -> "Скачивается…"
-                            download?.status?.name == "VERIFYING" -> "Проверка файла…"
-                            download?.status?.name == "FAILED" -> "Не удалось скачать"
-                            else -> "Не установлена"
-                        },
+                        transfer.statusLabel,
                         color = MaterialTheme.colorScheme.primary,
                     )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (saved == null && !downloading) {
+                        if (transfer.canDownload) {
                             IconButton(onClick = {
                                 actionModelId = model.id
                                 actionError = null
+                                pendingDownloads = pendingDownloads + model.id
                                 scope.launch {
                                     runCatching {
                                         if (download?.status?.name in
@@ -1555,6 +1564,7 @@ private fun Models(
                                             graph.downloads.enqueue(model.id)
                                         }
                                     }.onFailure {
+                                        pendingDownloads = pendingDownloads - model.id
                                         actionError =
                                             "Не удалось начать загрузку. Попробуйте ещё раз."
                                     }
@@ -1566,7 +1576,7 @@ private fun Models(
                                 )
                             }
                         }
-                        if (saved != null) {
+                        if (transfer.canDelete) {
                             IconButton(
                                 enabled = !controller.isBusy,
                                 onClick = {
@@ -1668,8 +1678,13 @@ private fun Models(
                     }
                     if (result != null) {
                         Text(
-                            "Скорость на телефоне: " +
-                                "%.1f".format(result.realTimeMultiplier) + "× реального времени",
+                            "Скорость на этом устройстве: " +
+                                "%.1f".format(result.realTimeMultiplier) + "× " +
+                                (if (result.realTimeMultiplier < 1.0) {
+                                    "(медленнее длительности записи)"
+                                } else {
+                                    "(быстрее реального времени)"
+                                }),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -1677,10 +1692,15 @@ private fun Models(
                         savedUi.qualityResult != null
                     ) {
                         Text(
-                            "Тест английской речи: " + (savedUi.benchmarkStatus ?: "готово") +
-                                ". WER — доля ошибок в словах, CER — в символах; " +
-                                "чем меньше, тем лучше.",
+                            "Точность на английском тестовом аудио: " +
+                                (savedUi.benchmarkStatus ?: "тест завершён"),
                             style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "WER — ошибки в словах, CER — ошибки в символах; " +
+                                "чем меньше процент, тем точнее результат.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                     }
                     if (actionModelId == model.id && actionError != null) {
@@ -1702,28 +1722,26 @@ private fun Models(
         items(catalog.filter { it.kind == ModelKind.VAD }, key = { "vad-" + it.id }) { model ->
             val saved = installed.firstOrNull { it.descriptorId == model.id }
             val download = downloads.firstOrNull { it.modelId == model.id }
-            val busy = download?.status?.name in setOf("QUEUED", "DOWNLOADING", "VERIFYING")
+            val transfer =
+                modelCardPresentation(
+                    installed = saved != null,
+                    downloadStatus = download?.status?.name,
+                    requestPending = model.id in pendingDownloads,
+                )
+            val busy = transfer.busy
             Card(shape = localScribeShape, colors = localScribeCardColors()) {
                 Column(
                     Modifier.fillMaxWidth().padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(model.displayName, style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        when {
-                            saved != null -> "Установлена"
-                            download?.status?.name == "QUEUED" -> "В очереди"
-                            download?.status?.name == "DOWNLOADING" -> "Скачивание…"
-                            download?.status?.name == "VERIFYING" -> "Проверка файла…"
-                            download?.status?.name == "FAILED" -> "Ошибка загрузки"
-                            else -> "Не установлена"
-                        },
-                    )
+                    Text(transfer.statusLabel)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        if (saved == null && !busy) {
+                        if (transfer.canDownload) {
                             IconButton(onClick = {
                                 actionModelId = model.id
                                 actionError = null
+                                pendingDownloads = pendingDownloads + model.id
                                 scope.launch {
                                     runCatching {
                                         if (download?.status?.name in
@@ -1734,6 +1752,7 @@ private fun Models(
                                             graph.downloads.enqueue(model.id)
                                         }
                                     }.onFailure {
+                                        pendingDownloads = pendingDownloads - model.id
                                         actionError =
                                             "Не удалось скачать VAD. Проверьте сеть и повторите."
                                     }
@@ -1755,7 +1774,7 @@ private fun Models(
                                 )
                             }
                         }
-                        if (saved != null) {
+                        if (transfer.canDelete) {
                             IconButton(onClick = {
                                 scope.launch {
                                     runCatching { graph.modelFiles.delete(model.id) }
@@ -1775,6 +1794,13 @@ private fun Models(
                                 null
                             },
                         )
+                        if (download?.status?.name == "DOWNLOADING") {
+                            Text(
+                                (download.downloadedBytes / 1_024).toString() +
+                                    " из " + (download.totalBytes / 1_024) + " КБ",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                     if (actionModelId == model.id && actionError != null) {
                         Text(requireNotNull(actionError), color = MaterialTheme.colorScheme.error)
