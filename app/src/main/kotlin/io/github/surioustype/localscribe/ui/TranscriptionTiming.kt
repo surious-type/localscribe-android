@@ -61,9 +61,10 @@ fun transcriptionTiming(
         (measuredCompute.toDouble() * (total - completed) / measuredAudio)
             .coerceIn(0.0, Long.MAX_VALUE.toDouble())
             .toLong()
-    val activeElapsed = chunks
-        .filter { it.status == ChunkStatus.PROCESSING }
-        .sumOf { (nowEpochMs - (it.startedAtEpochMs ?: nowEpochMs)).coerceAtLeast(0L) }
+    val activeElapsed =
+        chunks
+            .filter { it.status == ChunkStatus.PROCESSING }
+            .sumOf { (nowEpochMs - (it.startedAtEpochMs ?: nowEpochMs)).coerceAtLeast(0L) }
     // When a chunk runs slower than the samples, stop claiming a false '0 seconds left'.
     val remaining = if (activeElapsed > estimateMs) null else estimateMs - activeElapsed
     return TranscriptionTiming(elapsed, remaining, completed, total)

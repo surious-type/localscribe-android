@@ -8,9 +8,10 @@ class LiveAudioProgressTest {
     @Test
     fun `preview advances visible audio without changing checkpoint`() {
         val committed = 20_000L
-        val preview = listOf(
-            TranscriptSegment("preview", "chunk-2", 21_000L, 29_000L, "sample"),
-        )
+        val preview =
+            listOf(
+                    TranscriptSegment("preview", "chunk-2", 21_000L, 29_000L, "sample"),
+            )
         val visible = displayedAudioProgressMs(committed, preview, 38_000L)
         assertEquals(29_000L, visible)
         assertEquals(20_000L, committed)
@@ -18,9 +19,10 @@ class LiveAudioProgressTest {
 
     @Test
     fun `preview is clamped and cannot move visible progress backward`() {
-        val preview = listOf(
-            TranscriptSegment("preview", "chunk-2", 1_000L, 5_000L, "text"),
-        )
+        val preview =
+            listOf(
+                    TranscriptSegment("preview", "chunk-2", 1_000L, 5_000L, "text"),
+            )
         val oversizedPreview = preview.map { it.copy(absoluteEndMs = 99_000L) }
         val retained = displayedAudioProgressMs(20_000L, preview, 38_000L)
         val clamped = displayedAudioProgressMs(20_000L, oversizedPreview, 38_000L)
