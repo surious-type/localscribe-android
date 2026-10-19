@@ -7,6 +7,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createComposeRule
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
@@ -35,6 +36,24 @@ class ResponsiveCriticalControlsTest {
 
         rule.onNodeWithContentDescription("Start transcription").assertIsDisplayed().performClick()
         assertEquals("Start transcription", pressed)
+    }
+
+    @Test
+    fun largeFontKeepsEveryChunkWindowChoiceReachable() {
+        var selected = 20
+        rule.setContent {
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides Density(1f, fontScale = 1.8f),
+            ) {
+                Box(Modifier.width(280.dp)) {
+                    ChunkWindowSelector(selected) { selected = it }
+                }
+            }
+        }
+
+        rule.onNodeWithText("30 с").assertIsDisplayed().performClick()
+        assertEquals(30, selected)
+        rule.onNodeWithText("10 с").assertIsDisplayed()
     }
 
     @Test

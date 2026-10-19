@@ -57,6 +57,7 @@ class TranscriptionCoordinatorTest {
             assertEquals(2, messages.count { it.startsWith("phase=chunk") })
             assertTrue(messages.all { !it.contains("first") })
             assertTrue(messages.any { it.contains("decodeMs=") && it.contains("inferenceMs=") })
+            assertTrue(messages.any { it.contains("gateMs=") && it.contains("submittedMs=") })
             assertTrue(messages.any { it.contains("thermal=") && it.contains("vad=") })
         }
 

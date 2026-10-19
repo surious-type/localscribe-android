@@ -251,8 +251,10 @@ class TranscriptionCoordinator(
                                 chunk.startMs,
                                 chunk.endMs,
                             )
-                        val prepared = AudioSignalGuard.prepare(pcm)
                         val decodeMs = (System.nanoTime() - decodeStarted) / 1_000_000L
+                        val gateStarted = System.nanoTime()
+                        val prepared = AudioSignalGuard.prepare(pcm)
+                        val gateMs = (System.nanoTime() - gateStarted) / 1_000_000L
                         val config =
                             job.config.inference.withThreads(
                                 thermal.threadCount(job.config.inference.threadCount),
@@ -309,6 +311,8 @@ class TranscriptionCoordinator(
                             "phase=chunk jobId=" + jobId +
                                 " audioMs=" + (chunk.endMs - chunk.startMs) +
                                 " decodeMs=" + decodeMs +
+                                " gateMs=" + gateMs +
+                                " submittedMs=" + prepared.effectiveDurationMs +
                                 " inferenceMs=" + inferenceMs +
                                 " silent=" + prepared.isSilent +
                                 " trimmedMs=" + prepared.trimmedTailMs +

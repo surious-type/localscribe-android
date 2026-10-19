@@ -794,15 +794,7 @@ private fun SourceControls(
                 }
         }
         Text("Длина фрагмента", style = MaterialTheme.typography.titleMedium)
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            ChunkWindowProfiles.optionsSeconds.forEach { seconds ->
-                FilterChip(
-                    selected = chunkSeconds == seconds,
-                    onClick = { chunkSeconds = seconds },
-                    label = { Text("$seconds с") },
-                )
-            }
-        }
+        ChunkWindowSelector(chunkSeconds) { chunkSeconds = it }
         Text(
             "Короткие фрагменты чаще обновляют текст, но увеличивают число " +
                 "перекрытий и время обработки. Выбор действует только для новых задач.",
@@ -861,6 +853,30 @@ private fun SourceControls(
         }
         message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         Spacer(Modifier.height(16.dp))
+    }
+}
+
+/**
+ * Two short chip rows remain tappable on narrow devices and at large font scales.
+ * This selection is persisted only inside the new job's immutable chunk plan.
+ */
+@Composable
+internal fun ChunkWindowSelector(
+    selectedSeconds: Int,
+    onSelect: (Int) -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        ChunkWindowProfiles.optionsSeconds.chunked(2).forEach { options ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                options.forEach { seconds ->
+                    FilterChip(
+                        selected = selectedSeconds == seconds,
+                        onClick = { onSelect(seconds) },
+                        label = { Text("$seconds с") },
+                    )
+                }
+            }
+        }
     }
 }
 
