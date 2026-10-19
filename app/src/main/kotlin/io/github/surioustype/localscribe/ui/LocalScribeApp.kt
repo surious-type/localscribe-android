@@ -64,6 +64,7 @@ import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -90,6 +91,7 @@ import io.github.surioustype.localscribe.benchmark.BenchmarkComparisons
 import io.github.surioustype.localscribe.benchmark.BenchmarkRunState
 import io.github.surioustype.localscribe.benchmark.BenchmarkStep
 import io.github.surioustype.localscribe.core.domain.ChunkPlanner
+import io.github.surioustype.localscribe.core.domain.ChunkWindowProfiles
 import io.github.surioustype.localscribe.core.domain.TranscriptAssembler
 import io.github.surioustype.localscribe.core.model.AppVersion
 import io.github.surioustype.localscribe.core.model.BenchmarkRecord
@@ -576,6 +578,9 @@ private fun SourceControls(
     close: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    var chunkSeconds by rememberSaveable(sourceId) {
+        mutableStateOf(ChunkWindowProfiles.DEFAULT_SECONDS)
+    }
     val existingJobs by graph.transcriptionRepository
         .observeJobs()
         .collectAsStateWithLifecycle(emptyList())
@@ -630,8 +635,8 @@ private fun SourceControls(
                         vad = vad?.let { VadConfig(it.descriptorId, it.sha256) },
                     ),
                     // Persisted in the job: resuming an old job keeps its original boundaries.
-                    chunkDurationMs = 20_000,
-                    overlapMs = 2_000,
+                    chunkDurationMs = chunkSeconds * 1_000L,
+                    overlapMs = ChunkWindowProfiles.OVERLAP_MS,
                 )
             val job =
                 TranscriptionJob(
@@ -788,6 +793,22 @@ private fun SourceControls(
                     )
                 }
         }
+        Text("Длина фрагмента", style = MaterialTheme.typography.titleMedium)
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ChunkWindowProfiles.optionsSeconds.forEach { seconds ->
+                FilterChip(
+                    selected = chunkSeconds == seconds,
+                    onClick = { chunkSeconds = seconds },
+                    label = { Text("$seconds с") },
+                )
+            }
+        }
+        Text(
+            "Короткие фрагменты чаще обновляют текст, но увеличивают число " +
+                "перекрытий и время обработки. Выбор действует только для новых задач.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Card(colors = localScribeCardColors(), shape = localScribeShape) {
             Row(
                 Modifier.fillMaxWidth().padding(16.dp),
