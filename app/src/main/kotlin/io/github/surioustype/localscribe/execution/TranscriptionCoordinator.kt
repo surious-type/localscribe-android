@@ -1,8 +1,8 @@
 package io.github.surioustype.localscribe.execution
 
 import android.database.sqlite.SQLiteFullException
-import io.github.surioustype.localscribe.audio.AudioSourceException
 import io.github.surioustype.localscribe.audio.AudioSignalGuard
+import io.github.surioustype.localscribe.audio.AudioSourceException
 import io.github.surioustype.localscribe.core.domain.TranscriptContext
 import io.github.surioustype.localscribe.core.model.DomainFailure
 import io.github.surioustype.localscribe.core.model.FailureCode
@@ -288,16 +288,16 @@ class TranscriptionCoordinator(
                                     segment.startMs < prepared.effectiveDurationMs
                                 }.mapIndexed { index, segment ->
                                     val duration = chunk.endMs - chunk.startMs
-                                TranscriptSegment(
-                                    id = "${chunk.id}:$index",
-                                    chunkId = chunk.id,
-                                    absoluteStartMs =
-                                        chunk.startMs + segment.startMs.coerceIn(0, duration),
-                                    absoluteEndMs =
-                                        chunk.startMs + segment.endMs.coerceIn(0, duration),
-                                    text = segment.text,
-                                )
-                            }
+                                    TranscriptSegment(
+                                        id = "${chunk.id}:$index",
+                                        chunkId = chunk.id,
+                                        absoluteStartMs =
+                                            chunk.startMs + segment.startMs.coerceIn(0, duration),
+                                        absoluteEndMs =
+                                            chunk.startMs + segment.endMs.coerceIn(0, duration),
+                                        text = segment.text,
+                                    )
+                                }
                         val persistStarted = System.nanoTime()
                         repository.completeChunk(chunk.id, segments, clock.nowEpochMs())
                         val persistMs = (System.nanoTime() - persistStarted) / 1_000_000L
