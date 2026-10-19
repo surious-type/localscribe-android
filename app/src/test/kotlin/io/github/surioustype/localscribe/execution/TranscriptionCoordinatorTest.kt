@@ -61,6 +61,21 @@ class TranscriptionCoordinatorTest {
         }
 
     @Test
+    fun `silent chunks commit empty checkpoints without calling Whisper`() =
+        runTest {
+            val repository = FakeDurableRepository(job(), chunks().take(1))
+            val engine = FakeEngine()
+            val pipeline = FakeAudioPipeline().apply { silent = true }
+            val coordinator = coordinator(repository, engine, audioPipeline = pipeline)
+
+            assertEquals(ExecutionOutcome.Completed, coordinator.execute(JOB_ID))
+            assertTrue(repository.segments.isEmpty())
+            assertTrue(engine.configs.isEmpty())
+            assertEquals(ChunkStatus.COMPLETED, repository.currentChunks.single().status)
+            assertEquals(1, engine.unloadCount)
+        }
+
+    @Test
     fun `loads one model and stores engine timestamps as absolute exactly once`() =
         runTest {
             val repository = FakeDurableRepository(job(), chunks())
@@ -398,6 +413,7 @@ class TranscriptionCoordinatorTest {
 
     private class FakeAudioPipeline : AudioPipeline {
         var readFailure: Throwable? = null
+        var silent: Boolean = false
         val readChunkIds = mutableListOf<String>()
 
         override suspend fun readWindow(
@@ -407,7 +423,9 @@ class TranscriptionCoordinatorTest {
         ): FloatArray {
             readFailure?.let { throw it }
             readChunkIds += if (startMs == 90_000L) "chunk-2" else "chunk-1"
-            return FloatArray(((endMs - startMs) / 10).toInt())
+            return FloatArray(((endMs - startMs) / 10).toInt()) {
+                if (silent) 0f else 0.1f
+            }
         }
     }
 

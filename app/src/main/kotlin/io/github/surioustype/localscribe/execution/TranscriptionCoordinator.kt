@@ -2,6 +2,7 @@ package io.github.surioustype.localscribe.execution
 
 import android.database.sqlite.SQLiteFullException
 import io.github.surioustype.localscribe.audio.AudioSourceException
+import io.github.surioustype.localscribe.audio.AudioSignalGuard
 import io.github.surioustype.localscribe.core.domain.TranscriptContext
 import io.github.surioustype.localscribe.core.model.DomainFailure
 import io.github.surioustype.localscribe.core.model.FailureCode
@@ -10,6 +11,7 @@ import io.github.surioustype.localscribe.core.model.JobStatus
 import io.github.surioustype.localscribe.core.model.SourceAccessStatus
 import io.github.surioustype.localscribe.core.model.TranscriptSegment
 import io.github.surioustype.localscribe.core.model.TranscriptionChunk
+import io.github.surioustype.localscribe.core.model.TranscriptionResult
 import io.github.surioustype.localscribe.core.ports.AudioPipeline
 import io.github.surioustype.localscribe.core.ports.AudioRepository
 import io.github.surioustype.localscribe.core.ports.CancellationSignal
@@ -249,6 +251,7 @@ class TranscriptionCoordinator(
                                 chunk.startMs,
                                 chunk.endMs,
                             )
+                        val prepared = AudioSignalGuard.prepare(pcm)
                         val decodeMs = (System.nanoTime() - decodeStarted) / 1_000_000L
                         val config =
                             job.config.inference.withThreads(
@@ -257,19 +260,34 @@ class TranscriptionCoordinator(
                         liveTranscript.clear(jobId)
                         val inferenceStarted = System.nanoTime()
                         val result =
-                            engine.transcribeStreaming(
-                                pcm,
-                                config,
-                                prompt,
-                                CancellationSignal { control.request.get() != ControlRequest.NONE },
-                            ) { segment ->
-                                liveTranscript.publish(jobId, chunk, segment)
+                            if (prepared.isSilent) {
+                                // Completing an empty checkpoint is intentional: retry/resume
+                                // must never waste inference on confirmed digital silence.
+                                TranscriptionResult(emptyList())
+                            } else {
+                                engine.transcribeStreaming(
+                                    prepared.pcm,
+                                    config,
+                                    // A short fragment with a long silent tail must not be
+                                    // prompted to hallucinate the previous chunk's ending.
+                                    if (prepared.trimmedTailMs > 0L) null else prompt,
+                                    CancellationSignal {
+                                        control.request.get() != ControlRequest.NONE
+                                    },
+                                ) { segment ->
+                                    liveTranscript.publish(jobId, chunk, segment)
+                                }
                             }
                         val inferenceMs = (System.nanoTime() - inferenceStarted) / 1_000_000L
                         outcomeFor(control.request.get())?.let { return@withLock it }
                         val segments =
-                            result.segments.mapIndexed { index, segment ->
-                                val duration = chunk.endMs - chunk.startMs
+                            result.segments
+                                .filter { segment ->
+                                    // Never commit text timestamped entirely beyond the
+                                    // decoded speech-bearing window after silence trimming.
+                                    segment.startMs < prepared.effectiveDurationMs
+                                }.mapIndexed { index, segment ->
+                                    val duration = chunk.endMs - chunk.startMs
                                 TranscriptSegment(
                                     id = "${chunk.id}:$index",
                                     chunkId = chunk.id,
@@ -288,6 +306,8 @@ class TranscriptionCoordinator(
                                 " audioMs=" + (chunk.endMs - chunk.startMs) +
                                 " decodeMs=" + decodeMs +
                                 " inferenceMs=" + inferenceMs +
+                                " silent=" + prepared.isSilent +
+                                " trimmedMs=" + prepared.trimmedTailMs +
                                 " persistMs=" + persistMs +
                                 " segments=" + segments.size +
                                 " threads=" + config.threadCount +
