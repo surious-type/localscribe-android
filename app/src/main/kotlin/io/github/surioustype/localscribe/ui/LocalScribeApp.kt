@@ -535,17 +535,11 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
     val jobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
     val sources by graph.audioRepository.observeSources().collectAsStateWithLifecycle(emptyList())
     // Completed work stays visible instead of disappearing from the active-only filter.
+    // Keep a card at the same position when RUNNING becomes COMPLETED.
+    // Status-driven sorting makes the card appear to disappear on completion.
     val visible =
         jobs.filter { it.status != JobStatus.CANCELLED }
-            .sortedWith(
-                compareBy<TranscriptionJob> {
-                    when (it.status) {
-                        JobStatus.RUNNING -> 0
-                        JobStatus.PENDING, JobStatus.PAUSED -> 1
-                        else -> 2
-                    }
-                }.thenByDescending { it.updatedAtEpochMs },
-            )
+            .sortedWith(compareByDescending<TranscriptionJob> { it.createdAtEpochMs }.thenBy { it.id })
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (visible.isEmpty()) {
             item {
