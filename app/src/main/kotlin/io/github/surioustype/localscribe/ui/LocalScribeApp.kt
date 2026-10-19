@@ -852,6 +852,9 @@ private fun JobRow(
     val savedSegments by graph.transcriptionRepository
         .observeSegments(job.id)
         .collectAsStateWithLifecycle(emptyList())
+    val previewSegments by graph.liveTranscript
+        .observe(job.id)
+        .collectAsStateWithLifecycle(emptyList())
     Card(
         Modifier.fillMaxWidth(),
         colors = localScribeCardColors(),
@@ -890,15 +893,18 @@ private fun JobRow(
                     " / " + formatAudioDuration(totalDuration),
                 style = MaterialTheme.typography.bodySmall,
             )
-            if (savedSegments.isNotEmpty()) {
+            if (savedSegments.isNotEmpty() || previewSegments.isNotEmpty()) {
                 Text(
-                    "Уже распознано",
+                    if (previewSegments.isNotEmpty()) "Текст появляется в реальном времени"
+                    else "Уже распознано",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    savedSegments.takeLast(3).joinToString(" ") { it.text },
-                    maxLines = 4,
+                    (savedSegments.takeLast(2) + previewSegments)
+                        .takeLast(4)
+                        .joinToString(" ") { it.text },
+                    maxLines = 5,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
@@ -1036,6 +1042,10 @@ private fun TranscriptScreen(
         ).collectAsStateWithLifecycle(emptyList())
     val segments =
         remember(chunks, rawSegments) { TranscriptAssembler().assemble(chunks, rawSegments) }
+    val previewSegments by graph.liveTranscript
+        .observe(jobId)
+        .collectAsStateWithLifecycle(emptyList())
+    val visibleSegments = segments + previewSegments
     val player =
         remember {
             TranscriptPlaybackController(
@@ -1084,7 +1094,9 @@ private fun TranscriptScreen(
         }
     }
     val filtered =
-        remember(segments, query) { segments.filter { it.text.contains(query, ignoreCase = true) } }
+        remember(visibleSegments, query) {
+            visibleSegments.filter { it.text.contains(query, ignoreCase = true) }
+        }
     var showExport by remember { mutableStateOf(false) }
     LaunchedEffect(sourceUri) {
         sourceUri?.let { player.seekTo(it, 0L) }
@@ -1165,7 +1177,7 @@ private fun TranscriptScreen(
                 shape = RoundedCornerShape(18.dp),
             )
         }
-        if (segments.isEmpty()) {
+        if (visibleSegments.isEmpty()) {
             item {
                 Card(shape = localScribeShape, colors = localScribeCardColors()) {
                     Column(
@@ -1223,6 +1235,13 @@ private fun TranscriptScreen(
                         style = MaterialTheme.typography.labelMedium,
                     )
                     Text(segment.text, style = MaterialTheme.typography.bodyLarge)
+                    if (segment.id.startsWith("preview-")) {
+                        Text(
+                            "Распознаётся · предварительный текст",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                    }
                 }
             }
         }
