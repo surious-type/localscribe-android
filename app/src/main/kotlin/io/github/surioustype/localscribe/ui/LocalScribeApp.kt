@@ -7,6 +7,7 @@ import android.Manifest
 import android.content.Context
 import android.content.Intent
 import android.os.Build
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
@@ -164,6 +165,9 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                 Destination.valueOf(savedUi.destination)
             }.getOrDefault(Destination.HOME)
         val detail = savedUi.transcriptJobId != null || savedUi.selectedSourceId != null
+        BackHandler(enabled = uiModel.canNavigateBack()) {
+            uiModel.navigateBack()
+        }
         val title =
             when {
                 savedUi.transcriptJobId != null -> "Транскрипция"
@@ -180,13 +184,9 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                     title = { Text(title, fontWeight = FontWeight.SemiBold) },
                     navigationIcon = {
                         if (detail) {
-                            IconButton(onClick = {
-                                if (savedUi.transcriptJobId != null) {
-                                    uiModel.showTranscript(null)
-                                } else {
-                                    uiModel.selectSource(null)
-                                }
-                            }) { Icon(Icons.Default.ArrowBack, contentDescription = "Назад") }
+                            IconButton(onClick = uiModel::navigateBack) {
+                                Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
+                            }
                         }
                     },
                     colors =
