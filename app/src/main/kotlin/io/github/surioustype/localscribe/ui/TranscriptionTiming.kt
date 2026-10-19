@@ -19,10 +19,13 @@ fun transcriptionTiming(
     nowEpochMs: Long,
 ): TranscriptionTiming {
     val total = chunks.maxOfOrNull { it.endMs }?.coerceAtLeast(0L) ?: 0L
-    val completed = chunks
-        .filter { it.status == ChunkStatus.COMPLETED }
-        .maxOfOrNull { it.endMs }?.coerceIn(0L, total) ?: 0L
-    val elapsed = chunks.sumOf { chunk ->
+    val completed =
+        chunks
+            .filter { it.status == ChunkStatus.COMPLETED }
+            .maxOfOrNull { it.endMs }
+            ?.coerceIn(0L, total) ?: 0L
+    val elapsed =
+        chunks.sumOf { chunk ->
         val start = chunk.startedAtEpochMs ?: return@sumOf 0L
         when (chunk.status) {
             ChunkStatus.COMPLETED ->
