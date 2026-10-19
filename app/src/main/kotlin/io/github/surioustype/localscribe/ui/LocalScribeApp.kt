@@ -2023,7 +2023,6 @@ private fun Settings(
             }
         }
         installReturnMessage?.let { item { Text(it) } }
-
     }
 }
 

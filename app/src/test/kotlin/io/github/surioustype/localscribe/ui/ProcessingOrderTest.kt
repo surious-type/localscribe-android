@@ -13,7 +13,10 @@ class ProcessingOrderTest {
         val older = job("old", JobStatus.COMPLETED, 10)
         val active = job("new", JobStatus.RUNNING, 20)
         val initial = visibleProcessingJobs(listOf(older, active))
-        val completed = visibleProcessingJobs(listOf(older, active.copy(status = JobStatus.COMPLETED)))
+        val completed =
+            visibleProcessingJobs(
+                listOf(older, active.copy(status = JobStatus.COMPLETED)),
+            )
 
         assertEquals(listOf("new", "old"), initial.map { it.id })
         assertEquals(initial.map { it.id }, completed.map { it.id })
@@ -21,11 +24,12 @@ class ProcessingOrderTest {
 
     @Test
     fun `cancelled tasks are hidden without changing order`() {
-        val jobs = listOf(
-            job("old", JobStatus.COMPLETED, 10),
-            job("cancelled", JobStatus.CANCELLED, 30),
-            job("new", JobStatus.PENDING, 20),
-        )
+        val jobs =
+            listOf(
+                job("old", JobStatus.COMPLETED, 10),
+                job("cancelled", JobStatus.CANCELLED, 30),
+                job("new", JobStatus.PENDING, 20),
+            )
         assertEquals(listOf("new", "old"), visibleProcessingJobs(jobs).map { it.id })
     }
 

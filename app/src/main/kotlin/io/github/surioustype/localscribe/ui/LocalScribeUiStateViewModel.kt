@@ -32,6 +32,7 @@ class LocalScribeUiStateViewModel(
     fun reconcileModelDownloadRequests(acknowledgedIds: Set<String>) {
         pendingModelDownloads = pendingModelDownloads - acknowledgedIds
     }
+
     private val destinationHistory =
         (state.get<ArrayList<String>>(DESTINATION_HISTORY) ?: arrayListOf()).toMutableList()
     private val mutable =

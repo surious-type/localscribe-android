@@ -8,7 +8,8 @@ import io.github.surioustype.localscribe.core.model.TranscriptionJob
  * jumping to a different group while the user is watching its progress.
  */
 internal fun visibleProcessingJobs(jobs: List<TranscriptionJob>): List<TranscriptionJob> =
-    jobs.filter { it.status != JobStatus.CANCELLED }
+    jobs
+        .filter { it.status != JobStatus.CANCELLED }
         .sortedWith(
             compareByDescending<TranscriptionJob> { it.createdAtEpochMs }
                 .thenBy { it.id },
