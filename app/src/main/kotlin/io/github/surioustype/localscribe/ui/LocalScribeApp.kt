@@ -28,6 +28,10 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Speed
+import androidx.compose.material.icons.filled.Science
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
@@ -40,7 +44,6 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -85,7 +88,6 @@ import io.github.surioustype.localscribe.BuildConfig
 import io.github.surioustype.localscribe.benchmark.AndroidHardwareProfile
 import io.github.surioustype.localscribe.benchmark.BenchmarkComparisons
 import io.github.surioustype.localscribe.core.domain.ChunkPlanner
-import io.github.surioustype.localscribe.core.domain.RecommendationEngine
 import io.github.surioustype.localscribe.core.domain.TranscriptAssembler
 import io.github.surioustype.localscribe.core.model.AppVersion
 import io.github.surioustype.localscribe.core.model.BenchmarkRecord
@@ -1379,342 +1381,312 @@ private fun Models(
     val scope = rememberCoroutineScope()
     val catalog by graph.catalog.observeCatalog().collectAsStateWithLifecycle(emptyList())
     val downloads by graph.downloads.observeDownloads().collectAsStateWithLifecycle(emptyList())
-    val installed by graph.installedModels.observeInstalledModels().collectAsStateWithLifecycle(
-        emptyList(),
-    )
+    val installed by graph.installedModels.observeInstalledModels()
+        .collectAsStateWithLifecycle(emptyList())
     val benchmarks by graph.benchmark.observeBenchmarks().collectAsStateWithLifecycle(emptyList())
-    val demoSamples by graph.demoAudio.observeSamples().collectAsStateWithLifecycle(emptyList())
-    val runState by graph.benchmark.observeRunState().collectAsStateWithLifecycle(
-        io.github.surioustype.localscribe.benchmark
-            .BenchmarkRunState(),
-    )
-    val selected = savedUi.selectedBenchmarkModels
-    val status = savedUi.benchmarkStatus
-    val benchmarkController = uiModel.benchmarkController
-    val qualityResult = savedUi.qualityResult
-    LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        item { Text("Выбор модели", style = MaterialTheme.typography.headlineMedium) }
-        item { Text("Модели работают локально и скачиваются только по вашему запросу.") }
-        item { Text("Installed model storage: ${installed.sumOf { it.bytes } / (1024 * 1024)} MB") }
-        items(
-            catalog.filter { it.kind == ModelKind.TRANSCRIPTION },
-            key = { it.id },
-        ) { descriptor ->
-            val installedModel = installed.firstOrNull { it.descriptorId == descriptor.id }
-            val download = downloads.firstOrNull { it.modelId == descriptor.id }
+    val runState by graph.benchmark.observeRunState()
+        .collectAsStateWithLifecycle(
+            io.github.surioustype.localscribe.benchmark.BenchmarkRunState(),
+        )
+    val controller = uiModel.benchmarkController
+    var actionModelId by remember { mutableStateOf<String?>(null) }
+    var qualityModelId by remember { mutableStateOf<String?>(null) }
+    var actionError by remember { mutableStateOf<String?>(null) }
+    var testStartedAt by remember { mutableStateOf(0L) }
+    var testElapsed by remember { mutableStateOf(0L) }
+    LaunchedEffect(runState.phase, runState.modelId) {
+        if (runState.phase.name == "RUNNING") {
+            if (testStartedAt == 0L) testStartedAt = android.os.SystemClock.elapsedRealtime()
+            while (runState.phase.name == "RUNNING") {
+                testElapsed = android.os.SystemClock.elapsedRealtime() - testStartedAt
+                delay(1_000)
+            }
+        } else {
+            testStartedAt = 0L
+        }
+    }
+
+    LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            Text("Локальные модели", style = MaterialTheme.typography.headlineMedium)
+            Text(
+                "Модель скачивается один раз. Нажмите на значок теста для проверки на вашем телефоне.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        items(catalog.filter { it.kind == ModelKind.TRANSCRIPTION }, key = { it.id }) { model ->
+            val saved = installed.firstOrNull { it.descriptorId == model.id }
+            val download = downloads.firstOrNull { it.modelId == model.id }
+            val downloading = download?.status?.name in
+                setOf("QUEUED", "DOWNLOADING", "VERIFYING")
+            val result = benchmarks.firstOrNull {
+                it.modelId == model.id && it.modelHash.equals(saved?.sha256, true)
+            }
+            val testing = runState.phase.name == "RUNNING" &&
+                runState.modelId == model.id
             Card(
-                Modifier.fillMaxWidth(),
-                colors = localScribeCardColors(),
+                modifier = Modifier.fillMaxWidth(),
                 shape = localScribeShape,
+                colors = localScribeCardColors(),
             ) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Column(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(model.displayName, style = MaterialTheme.typography.titleMedium)
                     Text(
-                        descriptor.displayName,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                    )
-                    val qualityLabel =
-                        when (descriptor.quality.name) {
-                            "LOW" -> "Для быстрых задач"
-                            "BALANCED" -> "Баланс скорости и качества"
-                            "HIGH" -> "Высокое качество"
-                            else -> "Мультиязычная"
-                        }
-                    Text(
-                        qualityLabel + " · " +
-                            (descriptor.installedBytes / (1024 * 1024)) + " МБ",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        (if (model.id == "small") "Рекомендуется для начала · " else "") +
+                            when (model.quality.name) {
+                                "LOW" -> "Быстрая"
+                                "BALANCED" -> "Баланс качества и скорости"
+                                else -> "Высокая точность"
+                            } + " · " + (model.installedBytes / 1_048_576) + " МБ",
                         style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    if (descriptor.id == "small") {
-                        Text(
-                            "Рекомендуется для начала",
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                    }
-                    if (installedModel == null) {
-                        Button(onClick = {
-                            scope.launch {
-                                runCatching { graph.downloads.enqueue(descriptor.id) }.onFailure {
-                                    uiModel.setBenchmarkStatus("Download could not start")
-                                }
-                            }
-                        }) { Text("Скачать") }
-                    } else {
-                        Text("Установлена · проверена SHA-256")
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Checkbox(selected.contains(descriptor.id), { checked ->
-                                uiModel.setSelectedBenchmarkModels(
-                                    if (checked) {
-                                        selected + descriptor.id
-                                    } else {
-                                        selected -
-                                            descriptor.id
-                                    },
-                                )
-                            })
-                            OutlinedButton(onClick = {
+                    Text(
+                        when {
+                            saved != null -> "Установлена и проверена"
+                            download?.status?.name == "QUEUED" -> "Ожидает скачивания"
+                            download?.status?.name == "DOWNLOADING" -> "Скачивается…"
+                            download?.status?.name == "VERIFYING" -> "Проверка файла…"
+                            download?.status?.name == "FAILED" -> "Не удалось скачать"
+                            else -> "Не установлена"
+                        },
+                        color = MaterialTheme.colorScheme.primary,
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (saved == null && !downloading) {
+                            IconButton(onClick = {
+                                actionModelId = model.id
+                                actionError = null
                                 scope.launch {
                                     runCatching {
-                                        graph.modelFiles.delete(
-                                            descriptor.id,
-                                        )
+                                        if (download?.status?.name in setOf("CANCELLED", "FAILED")) {
+                                            graph.downloads.retry(model.id)
+                                        } else {
+                                            graph.downloads.enqueue(model.id)
+                                        }
                                     }.onFailure {
-                                        uiModel.setBenchmarkStatus(
-                                            "Cannot delete a model used by a pending, running, or paused job.",
-                                        )
+                                        actionError = "Не удалось начать загрузку. Попробуйте ещё раз."
                                     }
                                 }
-                            }) { Text("Удалить") }
-                            OutlinedButton(onClick = {
-                                benchmarkController.start {
-                                    runCatching {
-                                        graph.benchmark.runQualityDemo(
-                                            installedModel,
-                                            InferenceConfig(4, "en"),
-                                            "english_jfk_37s",
-                                            AndroidHardwareProfile.read(context),
-                                        )
-                                    }.onSuccess { result ->
-                                        val sample =
-                                            demoSamples.firstOrNull {
-                                                it.id ==
-                                                    result.sampleId
+                            }) {
+                                Icon(Icons.Default.FileDownload, contentDescription = "Скачать модель")
+                            }
+                        }
+                        if (saved != null) {
+                            IconButton(
+                                enabled = !controller.isBusy,
+                                onClick = {
+                                    actionModelId = model.id
+                                    qualityModelId = model.id
+                                    actionError = null
+                                    testStartedAt = android.os.SystemClock.elapsedRealtime()
+                                    controller.start {
+                                        runCatching {
+                                            graph.benchmark.runQualityDemo(
+                                                saved,
+                                                InferenceConfig(4, "en"),
+                                                "english_jfk_37s",
+                                                AndroidHardwareProfile.read(context),
+                                            )
+                                        }.onSuccess { quality ->
+                                            uiModel.setQualityResult(
+                                                QualityResultPresentation(
+                                                    quality.referenceText,
+                                                    quality.recognizedText,
+                                                    quality.score.wordErrors,
+                                                    quality.score.referenceWordCount,
+                                                    quality.differences.joinToString { it.kind.name },
+                                                    "Тестовая английская речь",
+                                                ),
+                                            )
+                                            uiModel.setBenchmarkStatus(
+                                                "WER " +
+                                                    (quality.score.wordErrorRate * 100).toInt() +
+                                                    "% · CER " +
+                                                    (quality.score.characterErrorRate * 100).toInt() + "%",
+                                            )
+                                        }.onFailure {
+                                            actionError = "Тест качества не завершён."
+                                        }
+                                    }
+                                },
+                            ) {
+                                Icon(Icons.Default.Science, contentDescription = "Тест качества")
+                            }
+                            IconButton(
+                                enabled = !controller.isBusy,
+                                onClick = {
+                                    actionModelId = model.id
+                                    actionError = null
+                                    testStartedAt = android.os.SystemClock.elapsedRealtime()
+                                    controller.start {
+                                        runCatching {
+                                            graph.benchmark.benchmark(
+                                                saved,
+                                                InferenceConfig(4, "en"),
+                                                "english_jfk_37s",
+                                                AndroidHardwareProfile.read(context),
+                                            )
+                                        }.onFailure {
+                                            actionError = "Не удалось измерить скорость."
+                                        }
+                                    }
+                                },
+                            ) {
+                                Icon(Icons.Default.Speed, contentDescription = "Тест скорости")
+                            }
+                            IconButton(
+                                enabled = !controller.isBusy,
+                                onClick = {
+                                    actionModelId = model.id
+                                    actionError = null
+                                    scope.launch {
+                                        runCatching { graph.modelFiles.delete(model.id) }
+                                            .onFailure {
+                                                actionError = "Модель используется задачей или её не удалось удалить."
                                             }
-                                        uiModel.setQualityResult(
-                                            QualityResultPresentation(
-                                                result.referenceText,
-                                                result.recognizedText,
-                                                result.score.wordErrors,
-                                                result.score.referenceWordCount,
-                                                result.differences.joinToString {
-                                                    it.kind.name.lowercase() + ":" +
-                                                        (
-                                                            it.recognizedToken
-                                                                ?: it.referenceToken.orEmpty()
-                                                        )
-                                                },
-                                                sample
-                                                    ?.let {
-                                                        "${it.displayName} · ${it.licenseName} · ${it.sourceUrl}"
-                                                    }.orEmpty(),
-                                            ),
-                                        )
-                                        val wer = (result.score.wordErrorRate * 100).toInt()
-                                        val cer = (result.score.characterErrorRate * 100).toInt()
-                                        uiModel.setBenchmarkStatus("Качество: WER $wer%, CER $cer%")
+                                    }
+                                },
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = "Удалить модель")
+                            }
+                        }
+                        if (downloading) {
+                            IconButton(onClick = {
+                                scope.launch {
+                                    runCatching { graph.downloads.cancel(model.id) }
+                                        .onFailure { actionError = "Не удалось отменить загрузку." }
+                                }
+                            }) {
+                                Icon(Icons.Default.Close, contentDescription = "Отменить загрузку")
+                            }
+                        }
+                    }
+                    if (downloading) {
+                        LocalScribeProgress(
+                            if (download?.status?.name == "DOWNLOADING") {
+                                download.downloadedBytes.toFloat() /
+                                    download.totalBytes.coerceAtLeast(1L).toFloat()
+                            } else {
+                                null
+                            },
+                        )
+                        if (download?.status?.name == "DOWNLOADING") {
+                            Text(
+                                (download.downloadedBytes / 1_048_576).toString() +
+                                    " из " + (download.totalBytes / 1_048_576) + " МБ",
+                            )
+                        }
+                    }
+                    if (testing) {
+                        LocalScribeProgress(null)
+                        Text(
+                            "Идёт тест · прошло " + formatAudioDuration(testElapsed) +
+                                ". Ожидаем результаты распознавания.",
+                        )
+                    }
+                    if (result != null) {
+                        Text(
+                            "Скорость на телефоне: " +
+                                "%.1f".format(result.realTimeMultiplier) + "× реального времени",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (qualityModelId == model.id && savedUi.qualityResult != null) {
+                        Text(
+                            "Качество теста: " + (savedUi.benchmarkStatus ?: "готово") +
+                                " (меньше ошибок — лучше)",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    if (actionModelId == model.id && actionError != null) {
+                        Text(
+                            requireNotNull(actionError),
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                }
+            }
+        }
+        item {
+            Text("Определение речи", style = MaterialTheme.typography.titleLarge)
+            Text(
+                "Silero VAD пропускает тишину и помогает избежать выдуманных фраз.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
+        items(catalog.filter { it.kind == ModelKind.VAD }, key = { "vad-" + it.id }) { model ->
+            val saved = installed.firstOrNull { it.descriptorId == model.id }
+            val download = downloads.firstOrNull { it.modelId == model.id }
+            val busy = download?.status?.name in setOf("QUEUED", "DOWNLOADING", "VERIFYING")
+            Card(shape = localScribeShape, colors = localScribeCardColors()) {
+                Column(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(model.displayName, style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        when {
+                            saved != null -> "Установлена"
+                            download?.status?.name == "QUEUED" -> "В очереди"
+                            download?.status?.name == "DOWNLOADING" -> "Скачивание…"
+                            download?.status?.name == "VERIFYING" -> "Проверка файла…"
+                            download?.status?.name == "FAILED" -> "Ошибка загрузки"
+                            else -> "Не установлена"
+                        },
+                    )
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        if (saved == null && !busy) {
+                            IconButton(onClick = {
+                                actionModelId = model.id
+                                actionError = null
+                                scope.launch {
+                                    runCatching {
+                                        if (download?.status?.name in setOf("FAILED", "CANCELLED")) {
+                                            graph.downloads.retry(model.id)
+                                        } else {
+                                            graph.downloads.enqueue(model.id)
+                                        }
                                     }.onFailure {
-                                        uiModel.setBenchmarkStatus(
-                                            "Quality demo did not complete",
-                                        )
+                                        actionError = "Не удалось скачать VAD. Проверьте сеть и повторите."
                                     }
                                 }
-                            }) { Text("Тест качества") }
-                        }
-                    }
-                    download?.let {
-                        val state =
-                            when (it.status.name) {
-                                "DOWNLOADING" -> "Скачивание"
-                                "VERIFYING" -> "Проверка SHA-256"
-                                "QUEUED" -> "В очереди"
-                                "COMPLETED" -> "Готово"
-                                "CANCELLED" -> "Отменено"
-                                "FAILED" -> "Ошибка загрузки"
-                                else -> it.status.name
+                            }) {
+                                Icon(Icons.Default.FileDownload, contentDescription = "Скачать VAD")
                             }
-                        Text(
-                            state + " · " + (it.downloadedBytes / (1024 * 1024)) +
-                                " / " + (it.totalBytes / (1024 * 1024)) + " МБ",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        if (it.status.name == "DOWNLOADING") {
-                            LocalScribeProgress(
-                                it.downloadedBytes.toFloat() /
-                                    it.totalBytes.coerceAtLeast(1L).toFloat(),
-                            )
-                        } else if (it.status.name == "VERIFYING") {
-                            LocalScribeProgress(null)
                         }
-                    }
-                    if (download?.status?.name == "DOWNLOADING" ||
-                        download?.status?.name == "VERIFYING"
-                    ) {
-                        OutlinedButton(onClick = {
-                            scope.launch { graph.downloads.cancel(descriptor.id) }
-                        }) { Text("Отменить") }
-                    }
-                    if (download?.status?.name == "FAILED" ||
-                        download?.status?.name == "CANCELLED"
-                    ) {
-                        OutlinedButton(onClick = {
-                            scope.launch { graph.downloads.retry(descriptor.id) }
-                        }) { Text("Повторить") }
-                    }
-                }
-            }
-        }
-        item {
-            Text(
-                "Определение голосовой активности",
-                style = MaterialTheme.typography.titleMedium,
-            )
-        }
-        items(
-            catalog.filter {
-                it.kind != ModelKind.TRANSCRIPTION
-            },
-            key = { "vad-${it.id}" },
-        ) { descriptor ->
-            val installedVad = installed.firstOrNull { it.descriptorId == descriptor.id }
-            val download = downloads.firstOrNull { it.modelId == descriptor.id }
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("${descriptor.displayName} (VAD, optional)")
-                    Text("Отсекает тишину перед распознаванием, работает вместе с Whisper.")
-                    if (installedVad ==
-                        null
-                    ) {
-                        Button(onClick = {
-                            scope.launch { graph.downloads.enqueue(descriptor.id) }
-                        }) { Text("Скачать VAD") }
-                    } else {
-                        OutlinedButton(onClick = {
-                            scope.launch {
-                                runCatching { graph.modelFiles.delete(descriptor.id) }.onFailure {
-                                    uiModel.setBenchmarkStatus(
-                                        "This VAD model is used by a resumable job.",
-                                    )
+                        if (busy) {
+                            IconButton(onClick = {
+                                scope.launch { graph.downloads.cancel(model.id) }
+                            }) { Icon(Icons.Default.Close, contentDescription = "Отменить загрузку VAD") }
+                        }
+                        if (saved != null) {
+                            IconButton(onClick = {
+                                scope.launch {
+                                    runCatching { graph.modelFiles.delete(model.id) }
+                                        .onFailure { actionError = "VAD используется задачей." }
                                 }
-                            }
-                        }) { Text("Удалить VAD") }
-                    }
-                    download?.let {
-                        val state =
-                            when (it.status.name) {
-                                "DOWNLOADING" -> "Скачивание"
-                                "VERIFYING" -> "Проверка SHA-256"
-                                "QUEUED" -> "В очереди"
-                                "COMPLETED" -> "Готово"
-                                "CANCELLED" -> "Отменено"
-                                "FAILED" -> "Ошибка загрузки"
-                                else -> it.status.name
-                            }
-                        Text(
-                            state + " · " + (it.downloadedBytes / (1024 * 1024)) +
-                                " / " + (it.totalBytes / (1024 * 1024)) + " МБ",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        if (it.status.name == "DOWNLOADING") {
-                            LocalScribeProgress(
-                                it.downloadedBytes.toFloat() /
-                                    it.totalBytes.coerceAtLeast(1L).toFloat(),
-                            )
-                        } else if (it.status.name == "VERIFYING") {
-                            LocalScribeProgress(null)
+                            }) { Icon(Icons.Default.Delete, contentDescription = "Удалить VAD") }
                         }
                     }
-                    if (download?.status?.name == "DOWNLOADING" ||
-                        download?.status?.name == "VERIFYING"
-                    ) {
-                        OutlinedButton(onClick = {
-                            scope.launch { graph.downloads.cancel(descriptor.id) }
-                        }) { Text("Cancel") }
-                    }
-                    if (download?.status?.name == "FAILED" ||
-                        download?.status?.name == "CANCELLED"
-                    ) {
-                        OutlinedButton(onClick = {
-                            scope.launch { graph.downloads.retry(descriptor.id) }
-                        }) { Text("Retry") }
-                    }
-                }
-            }
-        }
-        item {
-            Button(enabled = selected.isNotEmpty() && !benchmarkController.isBusy, onClick = {
-                val models = installed.filter { it.descriptorId in selected }
-                benchmarkController.start {
-                    runCatching {
-                        graph.benchmark.benchmarkSelected(
-                            models,
-                            InferenceConfig(4, "en"),
-                            "english_jfk_37s",
-                            AndroidHardwareProfile.read(context),
+                    if (busy) {
+                        LocalScribeProgress(
+                            if (download?.status?.name == "DOWNLOADING") {
+                                download.downloadedBytes.toFloat() /
+                                    download.totalBytes.coerceAtLeast(1L).toFloat()
+                            } else {
+                                null
+                            },
                         )
-                    }.onSuccess {
-                        uiModel.setBenchmarkStatus(
-                            "Benchmark saved. Timings use actual on-device inference after warm model loading.",
-                        )
-                    }.onFailure { uiModel.setBenchmarkStatus("Benchmark cancelled or failed") }
+                    }
+                    if (actionModelId == model.id && actionError != null) {
+                        Text(requireNotNull(actionError), color = MaterialTheme.colorScheme.error)
+                    }
                 }
-            }) { Text("Протестировать выбранные модели") }
-        }
-        item {
-            Text(
-                "Тест: " +
-                    when (runState.phase.name) {
-                        "IDLE" -> if (benchmarkController.isBusy) "Подготовка…" else "Не запущен"
-                        "RUNNING" ->
-                            "Обрабатывается " +
-                                (runState.modelId ?: "модель") + " · " +
-                                runState.completedModels + "/" + runState.totalModels
-                        "COMPLETED" -> "Тест завершён"
-                        "CANCELLED" -> "Тест отменён"
-                        else -> "Ошибка тестирования"
-                    },
-            )
-        }
-        status?.let { item { Text(it, color = MaterialTheme.colorScheme.primary) } }
-        qualityResult?.let { quality ->
-            item {
-                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text("Reference: ${quality.referenceText}")
-                    Text("Recognized: ${quality.recognizedText}")
-                    Text(
-                        "Word errors ${quality.wordErrors}/${quality.referenceWordCount}",
-                    )
-                    Text("Differences: ${quality.differences}")
-                    Text("Fixture: ${quality.fixture}")
-                }
-            }
-        }
-        item {
-            Text(
-                "Russian and mixed-language quality demos are unavailable in this bundled fixture manifest.",
-            )
-        }
-        item { Text("Результаты тестов", style = MaterialTheme.typography.titleMedium) }
-        val comparison = latestBenchmarkComparison(benchmarks)
-        comparison.reference?.let { reference ->
-            item {
-                Text(
-                    "Comparable runs use the same device, model hash, sample, and inference configuration as ${reference.modelId}.",
-                )
-            }
-        }
-        items(comparison.compatible, key = { it.id }) { result ->
-            Text(
-                "${result.modelId}: ${result.processingDurationMs}ms, ${"%.2f".format(
-                    result.realTimeFactor,
-                )} RTF · peak ${result.approximatePeakMemoryBytes?.div(
-                    1024 * 1024,
-                ) ?: "unknown"} MB · thermal ${result.thermalStatus ?: "unknown"}",
-            )
-        }
-        item {
-            val recommendations =
-                RecommendationEngine().recommend(
-                    catalog,
-                    benchmarks,
-                    AndroidHardwareProfile.read(context),
-                )
-            Text("Рекомендации")
-            recommendations.forEach {
-                Text(
-                    "${it.modelId}: ${it.level.name.lowercase()} — ${it.reason}",
-                )
             }
         }
     }
