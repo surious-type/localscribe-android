@@ -1087,16 +1087,16 @@ private fun JobRow(
     }
 }
 
-private fun userFacingFailure(code: String): String =
+internal fun userFacingFailure(code: String): String =
     when (code) {
-        "THERMAL_CRITICAL" -> "Paused because the device is too warm. Let it cool, then resume."
+        "THERMAL_CRITICAL" -> "Телефон нагрелся. Дайте ему остыть и продолжите."
         "SOURCE_PERMISSION_REQUIRED" ->
-            "Audio access was lost. Re-import the audio file, then resume."
-        "SOURCE_MISSING" -> "The audio source is unavailable. Choose an accessible copy."
+            "Доступ к аудио утрачен. Выберите файл снова и продолжите."
+        "SOURCE_MISSING" -> "Запись недоступна. Выберите другую копию файла."
         "MODEL_CORRUPTED", "MODEL_CHECKSUM_MISMATCH" ->
-            "The selected model needs to be downloaded again."
-        "TIMEOUT" -> "Android stopped long-running work. Resume while the app is visible."
-        else -> "This job needs attention before it can continue."
+            "Модель повреждена. Скачайте её заново."
+        "TIMEOUT" -> "Android прервал обработку. Откройте приложение и продолжите."
+        else -> "Обработка приостановлена. Проверьте запись, модель и свободную память."
     }
 
 @Composable
@@ -1848,6 +1848,10 @@ private fun Settings(
     )
     val presentation = updatePresentation(update)
     var automatic by remember { mutableStateOf(preferences.automaticUpdates) }
+    LaunchedEffect(automatic) {
+        // Reflect toggles immediately; an enabled manager uses its cached check.
+        graph.updates.checkForUpdate(AppVersion(BuildConfig.VERSION_NAME), force = false)
+    }
     var dynamic by remember { mutableStateOf(preferences.dynamicColors) }
     var appearanceMode by remember {
         mutableStateOf(
@@ -1984,8 +1988,7 @@ private fun Settings(
         } else if (presentation.canDownload && BuildConfig.DEBUG) {
             item {
                 Text(
-                    "В debug-сборке нельзя установить релиз с другой подписью. " +
-                        "Для обновления используйте новую debug APK.",
+                    "Это тестовая версия. Для её обновления установите новую тестовую APK.",
                     style = MaterialTheme.typography.bodySmall,
                 )
             }

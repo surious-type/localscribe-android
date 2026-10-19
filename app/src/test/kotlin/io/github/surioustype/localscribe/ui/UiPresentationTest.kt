@@ -14,6 +14,16 @@ import org.junit.Test
 
 class UiPresentationTest {
     @Test
+    fun `job failures are displayed in Russian without raw codes`() {
+        assertEquals(
+            "Телефон нагрелся. Дайте ему остыть и продолжите.",
+            userFacingFailure("THERMAL_CRITICAL"),
+        )
+        assertTrue(userFacingFailure("MODEL_CORRUPTED").contains("Скачайте"))
+        assertFalse(userFacingFailure("TIMEOUT").contains("Android stopped"))
+    }
+
+    @Test
     fun `theme selection honors explicit dark preference and dynamic support`() {
         assertEquals(ThemeSelection.DYNAMIC_DARK, selectTheme(true, true, false, true))
         assertEquals(ThemeSelection.DARK, selectTheme(true, true, false, false))
