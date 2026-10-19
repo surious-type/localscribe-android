@@ -81,6 +81,11 @@ class TranscriptionCoordinator(
     private val transcriptContext: TranscriptContext = TranscriptContext(),
     private val executionMutex: Mutex,
     private val liveTranscript: LiveTranscriptStore = LiveTranscriptStore(),
+    // Local Logcat only; does not record file names, transcript content, or PCM.
+    private val diagnosticLog: (String) -> Unit = { message ->
+        runCatching { android.util.Log.d("LocalScribePerf", message) }
+        Unit
+    },
 ) {
     private val controlMutex = Mutex()
     private val activeExecutions = mutableListOf<ActiveExecution>()
@@ -198,8 +203,15 @@ class TranscriptionCoordinator(
                                     ),
                                 )
                         }
+                    val loadStarted = System.nanoTime()
                     engine.loadModel(model, vad)
                     loaded = true
+                    diagnosticLog(
+                        "phase=model_load durationMs=" +
+                            ((System.nanoTime() - loadStarted) / 1_000_000L) +
+                            " model=" + job.config.modelId +
+                            " vad=" + (vad != null),
+                    )
 
                     while (true) {
                         outcomeFor(control.request.get())?.let { return@withLock it }
@@ -230,17 +242,20 @@ class TranscriptionCoordinator(
                                 previous,
                                 job.config.contextMaxCharacters,
                             )
+                        val decodeStarted = System.nanoTime()
                         val pcm =
                             audioPipeline.readWindow(
                                 sourceRecord.source,
                                 chunk.startMs,
                                 chunk.endMs,
                             )
+                        val decodeMs = (System.nanoTime() - decodeStarted) / 1_000_000L
                         val config =
                             job.config.inference.withThreads(
                                 thermal.threadCount(job.config.inference.threadCount),
                             )
                         liveTranscript.clear(jobId)
+                        val inferenceStarted = System.nanoTime()
                         val result =
                             engine.transcribeStreaming(
                                 pcm,
@@ -250,6 +265,7 @@ class TranscriptionCoordinator(
                             ) { segment ->
                                 liveTranscript.publish(jobId, chunk, segment)
                             }
+                        val inferenceMs = (System.nanoTime() - inferenceStarted) / 1_000_000L
                         outcomeFor(control.request.get())?.let { return@withLock it }
                         val segments =
                             result.segments.mapIndexed { index, segment ->
@@ -264,7 +280,20 @@ class TranscriptionCoordinator(
                                     text = segment.text,
                                 )
                             }
+                        val persistStarted = System.nanoTime()
                         repository.completeChunk(chunk.id, segments, clock.nowEpochMs())
+                        val persistMs = (System.nanoTime() - persistStarted) / 1_000_000L
+                        diagnosticLog(
+                            "phase=chunk jobId=" + jobId +
+                                " audioMs=" + (chunk.endMs - chunk.startMs) +
+                                " decodeMs=" + decodeMs +
+                                " inferenceMs=" + inferenceMs +
+                                " persistMs=" + persistMs +
+                                " segments=" + segments.size +
+                                " threads=" + config.threadCount +
+                                " thermal=" + thermal.severity.name +
+                                " vad=" + (config.vad != null),
+                        )
                         liveTranscript.clear(jobId)
                         claimed = null
                     }
