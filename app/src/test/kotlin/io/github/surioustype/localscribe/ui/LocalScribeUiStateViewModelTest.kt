@@ -19,6 +19,27 @@ class LocalScribeUiStateViewModelTest {
         assertTrue(LocalScribeUiStateViewModel(state).consumeInboundAudio("content://shared/next"))
     }
 
+    @Test
+    fun systemBackReturnsToPreviousTabAndClosesDetailsFirst() {
+        val handle = SavedStateHandle()
+        val model = LocalScribeUiStateViewModel(handle)
+        assertFalse(model.canNavigateBack())
+        model.selectDestination("MODELS")
+        model.selectDestination("PROCESSING")
+        model.showTranscript("job-123")
+
+        model.navigateBack()
+        assertEquals(null, model.uiState.value.transcriptJobId)
+        assertEquals("PROCESSING", model.uiState.value.destination)
+
+        model.navigateBack()
+        assertEquals("MODELS", model.uiState.value.destination)
+        val recreated = LocalScribeUiStateViewModel(handle)
+        recreated.navigateBack()
+        assertEquals("HOME", recreated.uiState.value.destination)
+        assertFalse(recreated.canNavigateBack())
+    }
+
     @Test fun selectionsAndSearchRestoreFromSavedState() {
         val handle = SavedStateHandle()
         val first = LocalScribeUiStateViewModel(handle)
