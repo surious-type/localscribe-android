@@ -535,7 +535,17 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
     val jobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
     val sources by graph.audioRepository.observeSources().collectAsStateWithLifecycle(emptyList())
     // Completed work stays visible instead of disappearing from the active-only filter.
-    val visible = jobs.filter { it.status != JobStatus.CANCELLED }
+    val visible =
+        jobs.filter { it.status != JobStatus.CANCELLED }
+            .sortedWith(
+                compareBy<TranscriptionJob> {
+                    when (it.status) {
+                        JobStatus.RUNNING -> 0
+                        JobStatus.PENDING, JobStatus.PAUSED -> 1
+                        else -> 2
+                    }
+                }.thenByDescending { it.updatedAtEpochMs },
+            )
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         if (visible.isEmpty()) {
             item {
@@ -1549,7 +1559,10 @@ private fun Models(
                         transfer.statusLabel,
                         color = MaterialTheme.colorScheme.primary,
                     )
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.Center,
+                    ) {
                         if (transfer.canDownload) {
                             IconButton(onClick = {
                                 actionModelId = model.id
@@ -1714,13 +1727,7 @@ private fun Models(
                 }
             }
         }
-        item {
-            Text("Определение речи", style = MaterialTheme.typography.titleMedium)
-            Text(
-                "Silero VAD пропускает тишину и помогает избежать выдуманных фраз.",
-                style = MaterialTheme.typography.bodySmall,
-            )
-        }
+        item { Text("Подавление тишины", style = MaterialTheme.typography.titleMedium) }
         items(catalog.filter { it.kind == ModelKind.VAD }, key = { "vad-" + it.id }) { model ->
             val saved = installed.firstOrNull { it.descriptorId == model.id }
             val download = downloads.firstOrNull { it.modelId == model.id }
@@ -1738,7 +1745,10 @@ private fun Models(
                 ) {
                     Text(model.displayName, style = MaterialTheme.typography.titleMedium)
                     Text(transfer.statusLabel)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.foundation.layout.FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.Center,
+                    ) {
                         if (transfer.canDownload) {
                             IconButton(onClick = {
                                 actionModelId = model.id
@@ -1969,7 +1979,9 @@ private fun Settings(
                 }
             }) { Text("Проверить сейчас") }
         }
-        presentation.releaseNotes?.let { notes -> item { Text(notes) } }
+        if (update.availability == UpdateAvailability.AVAILABLE) {
+            presentation.releaseNotes?.let { notes -> item { Text(notes, maxLines = 5) } }
+        }
         if (presentation.canDownload && !BuildConfig.DEBUG) {
             item {
                 Button(onClick = {
@@ -2018,12 +2030,7 @@ private fun Settings(
             }
         }
         installReturnMessage?.let { item { Text(it) } }
-        item {
-            Text(
-                "Конфиденциальность: записи и тексты остаются на телефоне. " +
-                    "Облачная транскрибация и аналитика не используются.",
-            )
-        }
+
     }
 }
 
