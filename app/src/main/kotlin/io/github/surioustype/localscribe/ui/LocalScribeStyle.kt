@@ -1,5 +1,7 @@
 package io.github.surioustype.localscribe.ui
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CardDefaults
@@ -8,6 +10,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -63,8 +66,13 @@ fun LocalScribeProgress(progress: Float?, modifier: Modifier = Modifier) {
             trackColor = MaterialTheme.colorScheme.surfaceVariant,
         )
     } else {
+        val animated by animateFloatAsState(
+            targetValue = progress.coerceIn(0f, 1f),
+            animationSpec = tween(durationMillis = 600),
+            label = "LocalScribe progress",
+        )
         LinearProgressIndicator(
-            progress = { progress.coerceIn(0f, 1f) },
+            progress = { animated },
             modifier = modifier.fillMaxWidth(),
             color = MaterialTheme.colorScheme.primary,
             trackColor = MaterialTheme.colorScheme.surfaceVariant,
