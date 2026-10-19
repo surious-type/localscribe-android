@@ -115,6 +115,8 @@ class GithubAppUpdateManager(
                 )
             checkStore.save(result)
             result.also { state.value = it }
+        } catch (cancelled: CancellationException) {
+            throw cancelled
         } catch (_: NoPublishedReleaseException) {
             val result =
                 UpdateState(

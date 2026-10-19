@@ -32,12 +32,16 @@ class MainActivityTest {
     @Test fun navigationShowsModelsAndSettings() {
         rule.onNodeWithText("Начать").performClick()
         rule.onNodeWithText("Модели").performClick()
-        rule.onNodeWithText("Определение речи").assertIsDisplayed()
+        rule.onNodeWithText("Модели").assertIsDisplayed()
         rule.onNodeWithText("Настройки").performClick()
         rule.onNodeWithText("Проверять обновления автоматически").assertIsDisplayed()
         rule.activityRule.scenario.onActivity {
             it.onBackPressedDispatcher.onBackPressed()
         }
-        rule.onNodeWithText("Определение речи").assertIsDisplayed()
+        rule.onNodeWithText("Модели").assertIsDisplayed()
+        rule.activityRule.scenario.onActivity {
+            it.onBackPressedDispatcher.onBackPressed()
+        }
+        rule.onNodeWithText("Поиск записей…").assertIsDisplayed()
     }
 }

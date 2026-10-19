@@ -728,7 +728,7 @@ private fun SourceControls(
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Button(onClick = {
-                        uiModel.selectSource(null)
+                        // Keep recording details underneath the transcript for Android Back.
                         uiModel.showTranscript(completed.id)
                     }) {
                         Text("Открыть расшифровку")

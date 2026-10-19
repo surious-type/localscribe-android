@@ -40,6 +40,24 @@ class LocalScribeUiStateViewModelTest {
         assertFalse(recreated.canNavigateBack())
     }
 
+    @Test
+    fun backFromTranscriptRestoresRecordingDetailsAfterRecreation() {
+        val handle = SavedStateHandle()
+        val first = LocalScribeUiStateViewModel(handle)
+        first.selectSource("audio-1")
+        first.showTranscript("job-1")
+
+        val recreated = LocalScribeUiStateViewModel(handle)
+        assertTrue(recreated.canNavigateBack())
+        recreated.navigateBack()
+        assertEquals(null, recreated.uiState.value.transcriptJobId)
+        assertEquals("audio-1", recreated.uiState.value.selectedSourceId)
+
+        recreated.navigateBack()
+        assertEquals(null, recreated.uiState.value.selectedSourceId)
+        assertFalse(recreated.canNavigateBack())
+    }
+
     @Test fun selectionsAndSearchRestoreFromSavedState() {
         val handle = SavedStateHandle()
         val first = LocalScribeUiStateViewModel(handle)

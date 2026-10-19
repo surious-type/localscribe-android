@@ -6,7 +6,7 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
-import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -71,7 +71,7 @@ class NotificationResumePermissionTest {
 
         rule
             .onNodeWithText(
-                "Notification permission is needed for visible transcription controls. Allow it and resume again.",
+                "Разрешите уведомления для управления обработкой в фоне.",
             ).assertIsDisplayed()
         assertEquals(JobStatus.PAUSED, jobStatus(jobId))
     }
@@ -111,8 +111,8 @@ class NotificationResumePermissionTest {
         rule.onNodeWithText("Обработка").performClick()
         rule.waitUntil(
             5_000,
-        ) { rule.onAllNodesWithText("Продолжить").fetchSemanticsNodes().isNotEmpty() }
-        rule.onAllNodesWithText("Продолжить").onFirst().performClick()
+        ) { rule.onAllNodesWithContentDescription("Продолжить").fetchSemanticsNodes().isNotEmpty() }
+        rule.onAllNodesWithContentDescription("Продолжить").onFirst().performClick()
     }
 
     private fun clickPermissionOption(matches: (String) -> Boolean) {
