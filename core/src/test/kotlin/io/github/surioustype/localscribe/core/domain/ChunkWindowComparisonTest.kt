@@ -27,7 +27,8 @@ class ChunkWindowComparisonTest {
     fun `empty source produces zero windows and no overhead`() {
         assertTrue(
             ChunkWindowProfiles.compare(0L).all {
-                it.chunkCount == 0 && it.processedAudioMs == 0L &&
+                it.chunkCount == 0 &&
+                    it.processedAudioMs == 0L &&
                     it.extraOverlapMs == 0L
             },
         )

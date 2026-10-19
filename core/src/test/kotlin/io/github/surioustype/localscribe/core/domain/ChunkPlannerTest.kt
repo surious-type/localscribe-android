@@ -46,13 +46,14 @@ class ChunkPlannerTest {
 
     @Test
     fun `very short final overlap is merged into preceding chunk`() {
-        val chunks = planner.plan(
-            "job",
-            "tiny",
-            39_000L,
-            config(chunkDurationMs = 20_000L, overlapMs = 2_000L),
-            0,
-        )
+        val chunks =
+            planner.plan(
+                "job",
+                "tiny",
+                39_000L,
+                config(chunkDurationMs = 20_000L, overlapMs = 2_000L),
+                0,
+            )
 
         assertEquals(
             listOf(0L to 20_000L, 18_000L to 39_000L),
@@ -63,18 +64,21 @@ class ChunkPlannerTest {
     @Test
     fun `four candidate chunk sizes cover recording without gaps`() {
         for (size in listOf(10_000L, 15_000L, 20_000L, 30_000L)) {
-            val chunks = planner.plan(
-                "job",
-                "tiny",
-                83_000L,
-                config(chunkDurationMs = size, overlapMs = 2_000L),
-                0,
-            )
+            val chunks =
+                planner.plan(
+                    "job",
+                    "tiny",
+                    83_000L,
+                    config(chunkDurationMs = size, overlapMs = 2_000L),
+                    0,
+                )
             assertEquals(0L, chunks.first().startMs)
             assertEquals(83_000L, chunks.last().endMs)
-            assertTrue(chunks.zipWithNext().all { (left, right) ->
-                right.startMs == left.endMs - 2_000L
-            })
+            assertTrue(
+                chunks.zipWithNext().all { (left, right) ->
+                    right.startMs == left.endMs - 2_000L
+                },
+            )
             assertTrue(chunks.all { it.endMs > it.startMs })
         }
     }
