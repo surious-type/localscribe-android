@@ -1,6 +1,7 @@
 package io.github.surioustype.localscribe.core.ports
 
 import io.github.surioustype.localscribe.core.model.DomainFailure
+import io.github.surioustype.localscribe.core.model.EngineSegment
 import io.github.surioustype.localscribe.core.model.InferenceConfig
 import io.github.surioustype.localscribe.core.model.InstalledModel
 import io.github.surioustype.localscribe.core.model.RecoverySummary
@@ -28,6 +29,22 @@ interface TranscriptionEngine {
         prompt: String?,
         cancellationSignal: CancellationSignal,
     ): TranscriptionResult
+
+    /**
+     * Reports provisional segments before the native call returns. Implementations without
+     * streaming support fall back to publishing segments at the end of each PCM window.
+     * Preview results are not durable and must never be exported as completed text.
+     */
+    suspend fun transcribeStreaming(
+        pcm: FloatArray,
+        config: InferenceConfig,
+        prompt: String?,
+        cancellationSignal: CancellationSignal,
+        onSegment: (EngineSegment) -> Unit,
+    ): TranscriptionResult =
+        transcribe(pcm, config, prompt, cancellationSignal).also { result ->
+            result.segments.forEach(onSegment)
+        }
 
     /** Releases the loaded native context. Calling this with no loaded model is safe. */
     suspend fun unloadModel()
