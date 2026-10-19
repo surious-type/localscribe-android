@@ -359,9 +359,10 @@ private fun Home(
         }
         ; graph.audioRepository.refresh()
     }
+    val recordingPreferences = remember(context) { AppPreferences(context) }
     var query by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf("all") }
-    var sort by remember { mutableStateOf("new") }
+    var filter by remember { mutableStateOf(recordingPreferences.recordingsFilter) }
+    var sort by remember { mutableStateOf(recordingPreferences.recordingsSort) }
     val visible =
         sources
             .filter { item ->
@@ -407,7 +408,10 @@ private fun Home(
                     .forEach { (value, label) ->
                         FilterChip(
                             selected = filter == value,
-                            onClick = { filter = value },
+                            onClick = {
+                                filter = value
+                                recordingPreferences.recordingsFilter = value
+                            },
                             label = { Text(label) },
                         )
                     }
@@ -446,6 +450,7 @@ private fun Home(
                             text = { Text(title) },
                             onClick = {
                                 sort = value
+                                recordingPreferences.recordingsSort = value
                                 menuOpen = false
                             },
                         )
