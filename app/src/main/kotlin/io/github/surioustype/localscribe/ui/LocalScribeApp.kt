@@ -379,6 +379,7 @@ private fun Home(
                     }
             }.let { items ->
                 when (sort) {
+                    "old" -> items.asReversed()
                     "az" -> items.sortedBy { it.source.displayName.lowercase() }
                     "za" -> items.sortedByDescending { it.source.displayName.lowercase() }
                     "long" -> items.sortedByDescending { it.source.durationMs }
@@ -420,6 +421,7 @@ private fun Home(
                     Spacer(Modifier.width(8.dp))
                     Text(
                         when (sort) {
+                            "old" -> "Сначала старые"
                             "az" -> "По названию А–Я"
                             "za" -> "По названию Я–А"
                             "long" -> "Сначала длинные"
@@ -434,6 +436,7 @@ private fun Home(
                 ) {
                     listOf(
                         "new" to "Сначала новые",
+                        "old" to "Сначала старые",
                         "az" to "По названию А–Я",
                         "za" to "По названию Я–А",
                         "long" to "Сначала длинные",
