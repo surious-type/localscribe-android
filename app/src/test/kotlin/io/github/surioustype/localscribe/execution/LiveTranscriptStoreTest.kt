@@ -52,9 +52,7 @@ class LiveTranscriptStoreTest {
             store.publish("b", chunk(), EngineSegment(0L, 500L, "world"))
             store.clear("a")
             assertTrue(store.observe("a").first().isEmpty())
-            assertEquals(
-                "world",
-                store.observe("b").first().single().text,
-            )
+            val remaining = store.observe("b").first().single()
+            assertEquals("world", remaining.text)
         }
 }
