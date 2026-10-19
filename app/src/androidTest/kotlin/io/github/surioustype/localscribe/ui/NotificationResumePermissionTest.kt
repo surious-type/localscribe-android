@@ -88,7 +88,10 @@ class NotificationResumePermissionTest {
             jobStatus(jobId) == JobStatus.PAUSED &&
                 jobFailureCode(jobId) == FailureCode.SOURCE_MISSING
         }
-        rule.onNodeWithText("The audio source is unavailable. Choose an accessible copy.").assertIsDisplayed()
+        rule
+            .onNodeWithText(
+                "The audio source is unavailable. Choose an accessible copy.",
+            ).assertIsDisplayed()
         assertEquals(JobStatus.PAUSED, jobStatus(jobId))
     }
 

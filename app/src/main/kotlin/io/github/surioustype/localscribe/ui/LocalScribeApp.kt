@@ -1494,10 +1494,11 @@ private fun Models(
         // As soon as an observable transfer or installed model appears,
         // the durable manager, rather than this short UI latch, owns its state.
         pendingDownloads =
-            pendingDownloads.filterNot { modelId ->
-                downloads.any { it.modelId == modelId } ||
-                    installed.any { it.descriptorId == modelId }
-            }.toSet()
+            pendingDownloads
+                .filterNot { modelId ->
+                    downloads.any { it.modelId == modelId } ||
+                        installed.any { it.descriptorId == modelId }
+                }.toSet()
     }
     var testElapsed by remember { mutableStateOf(controller.elapsedMs()) }
     LaunchedEffect(controller.isBusy) {
@@ -1677,14 +1678,15 @@ private fun Models(
                         )
                     }
                     if (result != null) {
+                        val speedDescription =
+                            if (result.realTimeMultiplier < 1.0) {
+                                "медленнее реального времени"
+                            } else {
+                                "быстрее реального времени"
+                            }
                         Text(
-                            "Скорость на этом устройстве: " +
-                                "%.1f".format(result.realTimeMultiplier) + "× " +
-                                (if (result.realTimeMultiplier < 1.0) {
-                                    "(медленнее длительности записи)"
-                                } else {
-                                    "(быстрее реального времени)"
-                                }),
+                            "Скорость: " + "%.1f".format(result.realTimeMultiplier) +
+                                "× · " + speedDescription,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -1877,7 +1879,8 @@ private fun Settings(
                 PreferenceSwitch(
                     "Цвета системы",
                     dynamic,
-                    description = "Использовать цвета обоев Android вместо стандартного оформления.",
+                    description =
+                        "Использовать цвета обоев Android вместо стандартного оформления.",
                 ) {
                     dynamic = it
                     preferences.dynamicColors = it
@@ -2021,7 +2024,6 @@ private fun Settings(
                     "Облачная транскрибация и аналитика не используются.",
             )
         }
-
     }
 }
 
