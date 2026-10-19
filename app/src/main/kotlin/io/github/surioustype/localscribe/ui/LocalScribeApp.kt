@@ -947,7 +947,6 @@ private fun JobRow(
                 )
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (job.status ==
                     JobStatus.RUNNING
                 ) {
@@ -1016,7 +1015,6 @@ private fun JobRow(
                     OutlinedButton(
                         onClick = { scope.launch { graph.coordinator.cancel(job.id) } },
                     ) { Text("Остановить") }
-                }
                 }
                 if (job.status in setOf(JobStatus.COMPLETED, JobStatus.RUNNING, JobStatus.PAUSED)) {
                     OutlinedButton(
