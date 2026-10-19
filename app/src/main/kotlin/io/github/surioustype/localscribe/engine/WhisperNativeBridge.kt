@@ -36,6 +36,11 @@ fun interface NativeCancellationSignal {
     fun isCancelled(): Boolean
 }
 
+/** JNI may call this from a native worker thread; implementations must be thread-safe. */
+fun interface NativeSegmentListener {
+    fun onSegment(startMs: Long, endMs: Long, text: String)
+}
+
 interface WhisperNativeBridge {
     fun load(modelPath: String): Long
 
@@ -45,6 +50,17 @@ interface WhisperNativeBridge {
         request: NativeTranscriptionRequest,
         cancellationSignal: NativeCancellationSignal,
     ): NativeTranscriptionResult
+
+    fun transcribeStreaming(
+        handle: Long,
+        pcm: FloatArray,
+        request: NativeTranscriptionRequest,
+        cancellationSignal: NativeCancellationSignal,
+        listener: NativeSegmentListener,
+    ): NativeTranscriptionResult =
+        transcribe(handle, pcm, request, cancellationSignal).also { result ->
+            result.segments.forEach { listener.onSegment(it.startMs, it.endMs, it.text) }
+        }
 
     fun abort(handle: Long)
 
@@ -63,6 +79,14 @@ object JniWhisperNativeBridge : WhisperNativeBridge {
         pcm: FloatArray,
         request: NativeTranscriptionRequest,
         cancellationSignal: NativeCancellationSignal,
+    ): NativeTranscriptionResult
+
+    external override fun transcribeStreaming(
+        handle: Long,
+        pcm: FloatArray,
+        request: NativeTranscriptionRequest,
+        cancellationSignal: NativeCancellationSignal,
+        listener: NativeSegmentListener,
     ): NativeTranscriptionResult
 
     external override fun abort(handle: Long)
