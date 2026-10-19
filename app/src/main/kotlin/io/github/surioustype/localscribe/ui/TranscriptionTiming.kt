@@ -38,17 +38,18 @@ fun transcriptionTiming(
 
     // Overlap must not count as additional audio when measuring throughput.
     var previousEnd = 0L
-    val allMeasurements = committed.mapNotNull { chunk ->
-        val uniqueMs = (chunk.endMs - maxOf(previousEnd, chunk.startMs)).coerceAtLeast(0L)
-        previousEnd = maxOf(previousEnd, chunk.endMs)
-        val started = chunk.startedAtEpochMs
-        val ended = chunk.completedAtEpochMs
-        if (uniqueMs == 0L || started == null || ended == null || ended <= started) {
-            null
-        } else {
-            uniqueMs to (ended - started)
+    val allMeasurements =
+        committed.mapNotNull { chunk ->
+            val uniqueMs = (chunk.endMs - maxOf(previousEnd, chunk.startMs)).coerceAtLeast(0L)
+            previousEnd = maxOf(previousEnd, chunk.endMs)
+            val started = chunk.startedAtEpochMs
+            val ended = chunk.completedAtEpochMs
+            if (uniqueMs == 0L || started == null || ended == null || ended <= started) {
+                null
+            } else {
+                uniqueMs to (ended - started)
+            }
         }
-    }
     val measurements = allMeasurements.takeLast(3)
     if (measurements.isEmpty()) {
         return TranscriptionTiming(elapsed, null, completed, total)
