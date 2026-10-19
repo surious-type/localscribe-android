@@ -1755,14 +1755,7 @@ private fun Settings(
     LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
         item { Text("Внешний вид", style = MaterialTheme.typography.headlineMedium) }
         item {
-            PreferenceSwitch("Проверять обновления автоматически", automatic) {
-                automatic = it
-                preferences.automaticUpdates =
-                    it
-            }
-        }
-        item {
-            PreferenceSwitch("Динамические цвета", dynamic) {
+            PreferenceSwitch("Цвета системы", dynamic) {
                 dynamic = it
                 preferences.dynamicColors =
                     it
@@ -1771,7 +1764,8 @@ private fun Settings(
         }
         item {
             Text("Тема")
-            AppearanceMode.entries.forEach { mode ->
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                AppearanceMode.entries.forEach { mode ->
                 FilterChip(
                     selected = appearanceMode == mode,
                     onClick = {
@@ -1789,9 +1783,16 @@ private fun Settings(
                         )
                     },
                 )
+                }
             }
         }
         item { Text("Обновления", style = MaterialTheme.typography.titleLarge) }
+        item {
+            PreferenceSwitch("Проверять обновления автоматически", automatic) {
+                automatic = it
+                preferences.automaticUpdates = it
+            }
+        }
         item {
             Text(
                 "Версия " + BuildConfig.VERSION_NAME + " · " +
@@ -1813,7 +1814,7 @@ private fun Settings(
         update.failure?.let {
             item {
                 Text(
-                    "Не удалось проверить обновления. Проверьте подключение к интернету.",
+                    "Не удалось получить сведения о релизе. Проверьте сеть или попробуйте позже.",
                     color = MaterialTheme.colorScheme.error,
                 )
             }
@@ -1833,10 +1834,25 @@ private fun Settings(
                 }) { Text("Скачать обновление") }
             }
         }
-        item {
-            Text(
-                "Download: ${updateDownload.status.name.lowercase()} ${updateDownload.downloadedBytes / 1024} / ${updateDownload.totalBytes / 1024} KiB",
-            )
+        if (updateDownload.status.name != "IDLE") {
+            item {
+                Text(
+                    when (updateDownload.status.name) {
+                        "DOWNLOADING" -> "Скачивание обновления"
+                        "VERIFYING" -> "Проверка обновления"
+                        "READY_TO_INSTALL" -> "Обновление готово к установке"
+                        "FAILED" -> "Не удалось загрузить обновление"
+                        "CANCELLED" -> "Загрузка отменена"
+                        else -> "Подготовка обновления"
+                    },
+                )
+                if (updateDownload.status.name == "DOWNLOADING") {
+                    LocalScribeProgress(
+                        updateDownload.downloadedBytes.toFloat() /
+                            updateDownload.totalBytes.coerceAtLeast(1L).toFloat(),
+                    )
+                }
+            }
         }
         if (updateDownload.status ==
             io.github.surioustype.localscribe.core.model.UpdateDownloadStatus.READY_TO_INSTALL
