@@ -10,12 +10,32 @@ import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withContext
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class BenchmarkRunControllerTest {
+    @Test
+    fun `elapsed time belongs to controller across screen recreation`() =
+        runTest {
+            var nowMs = 1_000L
+            val controller = BenchmarkRunController(this) { nowMs }
+            val waiting = CompletableDeferred<Unit>()
+
+            assertTrue(controller.start("tiny") { waiting.await() })
+            runCurrent()
+            nowMs = 31_000L
+            assertEquals(30_000L, controller.elapsedMs())
+            assertEquals("tiny", controller.activeModelId)
+
+            controller.cancel()
+            runCurrent()
+            assertEquals(0L, controller.elapsedMs())
+            assertFalse(controller.isBusy)
+        }
+
     @Test
     fun `stop cancels active benchmark and clears busy state`() =
         runTest {

@@ -11,36 +11,59 @@ data class TranscriptionTiming(
 )
 
 /**
- * Uses actual chunk execution times, not the job's last-modified timestamp.
- * Paused time is not included; ETA stays unknown until a full chunk is committed.
+ * Predict from fully committed chunks only. Time spent on a still-running chunk
+ * advances the countdown, but never makes the estimated total slower each second.
+ * Until a first chunk is saved, ETA is genuinely unknown.
  */
 fun transcriptionTiming(
     chunks: List<TranscriptionChunk>,
     nowEpochMs: Long,
 ): TranscriptionTiming {
     val total = chunks.maxOfOrNull { it.endMs }?.coerceAtLeast(0L) ?: 0L
-    val completed =
-        chunks
-            .filter { it.status == ChunkStatus.COMPLETED }
-            .maxOfOrNull { it.endMs }
-            ?.coerceIn(0L, total) ?: 0L
+    val committed = chunks.filter { it.status == ChunkStatus.COMPLETED }.sortedBy { it.startMs }
+    val completed = committed.maxOfOrNull { it.endMs }?.coerceIn(0L, total) ?: 0L
     val elapsed =
         chunks.sumOf { chunk ->
-            val start = chunk.startedAtEpochMs ?: return@sumOf 0L
+            val started = chunk.startedAtEpochMs ?: return@sumOf 0L
             when (chunk.status) {
                 ChunkStatus.COMPLETED ->
-                    (chunk.completedAtEpochMs ?: start).minus(start).coerceAtLeast(0L)
-                ChunkStatus.PROCESSING -> (nowEpochMs - start).coerceAtLeast(0L)
+                    ((chunk.completedAtEpochMs ?: started) - started).coerceAtLeast(0L)
+                ChunkStatus.PROCESSING -> (nowEpochMs - started).coerceAtLeast(0L)
                 else -> 0L
             }
         }
-    val estimate =
-        if (completed > 0L && completed < total && elapsed > 0L) {
-            (elapsed.toDouble() * (total - completed) / completed)
-                .coerceAtMost(Long.MAX_VALUE.toDouble())
-                .toLong()
-        } else {
-            null
-        }
-    return TranscriptionTiming(elapsed, estimate, completed, total)
+    if (total == 0L || completed >= total) {
+        return TranscriptionTiming(elapsed, if (total == 0L) null else 0L, completed, total)
+    }
+
+    // Overlap must not count as additional audio when measuring throughput.
+    var previousEnd = 0L
+    val measurements =
+        committed.mapNotNull { chunk ->
+            val uniqueMs = (chunk.endMs - maxOf(previousEnd, chunk.startMs)).coerceAtLeast(0L)
+            previousEnd = maxOf(previousEnd, chunk.endMs)
+            val started = chunk.startedAtEpochMs
+            val ended = chunk.completedAtEpochMs
+            if (uniqueMs == 0L || started == null || ended == null || ended <= started) {
+                null
+            } else {
+                uniqueMs to (ended - started)
+            }
+        }.takeLast(3)
+    if (measurements.isEmpty()) {
+        return TranscriptionTiming(elapsed, null, completed, total)
+    }
+
+    // A small moving window reacts to thermal throttling only after real evidence arrives.
+    val measuredAudio = measurements.sumOf { it.first }
+    val measuredCompute = measurements.sumOf { it.second }
+    val estimateMs =
+        (measuredCompute.toDouble() * (total - completed) / measuredAudio)
+            .coerceIn(0.0, Long.MAX_VALUE.toDouble()).toLong()
+    val activeElapsed =
+        chunks.filter { it.status == ChunkStatus.PROCESSING }
+            .sumOf { (nowEpochMs - (it.startedAtEpochMs ?: nowEpochMs)).coerceAtLeast(0L) }
+    // When a chunk runs slower than the samples, stop claiming a false '0 seconds left'.
+    val remaining = if (activeElapsed > estimateMs) null else estimateMs - activeElapsed
+    return TranscriptionTiming(elapsed, remaining, completed, total)
 }

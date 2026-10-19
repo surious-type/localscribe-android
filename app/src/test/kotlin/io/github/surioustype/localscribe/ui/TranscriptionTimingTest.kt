@@ -53,7 +53,60 @@ class TranscriptionTimingTest {
         assertEquals(15_000L, result.elapsedMs)
         assertEquals(90_000L, result.completedAudioMs)
         assertEquals(180_000L, result.totalAudioMs)
-        assertEquals(15_000L, result.remainingMs)
+        assertEquals(5_000L, result.remainingMs)
+    }
+
+    @Test
+    fun `eta decreases while current chunk processes rather than increasing`() {
+        val chunks =
+            listOf(
+                chunk("a", 0, 20_000, ChunkStatus.COMPLETED, 1_000, 11_000),
+                chunk("b", 18_000, 38_000, ChunkStatus.PROCESSING, 12_000),
+            )
+        val earlier = transcriptionTiming(chunks, nowEpochMs = 13_000)
+        val later = transcriptionTiming(chunks, nowEpochMs = 17_000)
+        assertEquals(20_000L, earlier.completedAudioMs)
+        assertEquals(38_000L, earlier.totalAudioMs)
+        assertEquals(7_000L, earlier.remainingMs)
+        assertEquals(3_000L, later.remainingMs)
+        assertEquals(4_000L, earlier.remainingMs!! - later.remainingMs!!)
+    }
+
+    @Test
+    fun `overdue prediction becomes unknown rather than claiming completion`() {
+        val chunks =
+            listOf(
+                chunk("a", 0, 20_000, ChunkStatus.COMPLETED, 1_000, 11_000),
+                chunk("b", 18_000, 38_000, ChunkStatus.PROCESSING, 12_000),
+            )
+        val result = transcriptionTiming(chunks, nowEpochMs = 60_000)
+        assertNull(result.remainingMs)
+        assertEquals(20_000L, result.completedAudioMs)
+    }
+
+    @Test
+    fun `overlap does not bias completed audio duration`() {
+        val result = transcriptionTiming(
+            listOf(
+                chunk("a", 0, 20_000, ChunkStatus.COMPLETED, 1_000, 11_000),
+                chunk("b", 18_000, 38_000, ChunkStatus.COMPLETED, 12_000, 22_000),
+                chunk("c", 36_000, 56_000, ChunkStatus.PROCESSING, 23_000),
+            ),
+            nowEpochMs = 24_000,
+        )
+        assertEquals(38_000L, result.completedAudioMs)
+        assertEquals(56_000L, result.totalAudioMs)
+        assertEquals(8_000L, result.remainingMs)
+    }
+
+    @Test
+    fun `completed transcription has zero remaining time`() {
+        val result = transcriptionTiming(
+            listOf(chunk("a", 0, 10_000, ChunkStatus.COMPLETED, 1_000, 6_000)),
+            nowEpochMs = 100_000,
+        )
+        assertEquals(0L, result.remainingMs)
+        assertEquals(5_000L, result.elapsedMs)
     }
 
     @Test

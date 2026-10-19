@@ -74,13 +74,27 @@ fun updatePresentation(state: UpdateState): UpdatePresentation =
 /** One foreground-safe owner for either a quality or batch benchmark operation. */
 class BenchmarkRunController(
     private val scope: CoroutineScope,
+    private val monotonicMs: () -> Long = { System.nanoTime() / 1_000_000L },
 ) {
     var isBusy: Boolean by mutableStateOf(false)
         private set
+    var activeModelId: String? by mutableStateOf(null)
+        private set
+    var lastQualityModelId: String? by mutableStateOf(null)
+        private set
+    private var startedAtMs: Long? = null
     private var activeJob: Job? = null
 
-    fun start(block: suspend () -> Unit): Boolean {
+    fun elapsedMs(): Long = startedAtMs?.let { (monotonicMs() - it).coerceAtLeast(0L) } ?: 0L
+
+    fun rememberQualityResult(modelId: String) {
+        lastQualityModelId = modelId
+    }
+
+    fun start(modelId: String? = null, block: suspend () -> Unit): Boolean {
         if (isBusy) return false
+        activeModelId = modelId
+        startedAtMs = monotonicMs()
         isBusy = true
         val launchedJob =
             scope.launch(start = CoroutineStart.LAZY) {
@@ -95,6 +109,8 @@ class BenchmarkRunController(
                     if (activeJob === owner) {
                         isBusy = false
                         activeJob = null
+                        activeModelId = null
+                        startedAtMs = null
                     }
                 }
             }
@@ -103,9 +119,12 @@ class BenchmarkRunController(
         return true
     }
 
-    fun onStop() {
+    /** Cancels the actual inference coroutine; busy remains true during native cleanup. */
+    fun cancel() {
         activeJob?.cancel()
     }
+
+    fun onStop() = cancel()
 }
 
 enum class TranscriptionStartResult {
