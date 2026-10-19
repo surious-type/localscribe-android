@@ -10,7 +10,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LiveTranscriptStoreTest {
-    private fun chunk(id: String = "c") = TranscriptionChunk(
+    private fun chunk(id: String = "c") =
+        TranscriptionChunk(
         id = id,
         jobId = "job",
         modelId = "tiny",
@@ -19,10 +20,11 @@ class LiveTranscriptStoreTest {
         status = ChunkStatus.PROCESSING,
         attempt = 1,
         createdAtEpochMs = 0L,
-    )
+        )
 
     @Test
-    fun `preview uses absolute timestamps and is scoped to the job`() = runTest {
+    fun `preview uses absolute timestamps and is scoped to the job`() =
+        runTest {
         val store = LiveTranscriptStore()
         store.publish("job", chunk(), EngineSegment(1_000L, 2_500L, "  Привет  "))
         val entries = store.observe("job").first()
@@ -34,7 +36,8 @@ class LiveTranscriptStoreTest {
     }
 
     @Test
-    fun `silent and invalid segments are never shown`() = runTest {
+    fun `silent and invalid segments are never shown`() =
+        runTest {
         val store = LiveTranscriptStore()
         store.publish("job", chunk(), EngineSegment(0L, 1_000L, "  "))
         store.publish("job", chunk(), EngineSegment(2_000L, 1_000L, "bad"))
@@ -42,7 +45,8 @@ class LiveTranscriptStoreTest {
     }
 
     @Test
-    fun `clearing an unfinished chunk discards only provisional text`() = runTest {
+    fun `clearing an unfinished chunk discards only provisional text`() =
+        runTest {
         val store = LiveTranscriptStore()
         store.publish("a", chunk(), EngineSegment(0L, 500L, "hello"))
         store.publish("b", chunk(), EngineSegment(0L, 500L, "world"))
