@@ -180,13 +180,9 @@ class AndroidAudioRepository(
                         )
                     currentCoroutineContext().ensureActive()
                     withContext(NonCancellable) {
-                        importDates
-                            .edit()
-                            .putLong(
-                                record.source.id,
-                                System.currentTimeMillis(),
-                            )
-                            .apply()
+                        val editor = importDates.edit()
+                        editor.putLong(record.source.id, System.currentTimeMillis())
+                        editor.apply()
                         store.upsert(record)
                         committed = true
                     }
