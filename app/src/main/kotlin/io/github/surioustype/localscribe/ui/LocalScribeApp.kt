@@ -586,6 +586,11 @@ private fun SourceControls(
     close: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
+    val existingJobs by graph.transcriptionRepository.observeJobs()
+        .collectAsStateWithLifecycle(emptyList())
+    val latestCompletedJob = existingJobs.firstOrNull {
+        it.sourceId == sourceId && it.status == JobStatus.COMPLETED
+    }
     val transcriptionModels = installedModels.filter { it.descriptorId != "silero-v6.2.0" }
     val installedModelIds = transcriptionModels.map { it.descriptorId }.distinct()
     val vadModels = installedModels.filter { it.descriptorId == "silero-v6.2.0" }
@@ -716,6 +721,25 @@ private fun SourceControls(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
+                }
+            }
+        }
+        latestCompletedJob?.let { completed ->
+            Card(colors = localScribeCardColors(), shape = localScribeShape) {
+                Column(
+                    Modifier.fillMaxWidth().padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Text(
+                        "Для этой записи есть готовая транскрипция",
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Button(onClick = {
+                        uiModel.selectSource(null)
+                        uiModel.showTranscript(completed.id)
+                    }) {
+                        Text("Открыть расшифровку")
+                    }
                 }
             }
         }
