@@ -32,6 +32,7 @@ import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
@@ -1216,6 +1217,43 @@ private fun TranscriptScreen(
                 shape = RoundedCornerShape(18.dp),
             )
         }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                IconButton(
+                    enabled = segments.isNotEmpty(),
+                    onClick = {
+                        clipboard.setText(AnnotatedString(segments.joinToString("\n") { it.text }))
+                    },
+                ) {
+                    Icon(Icons.Default.ContentCopy, contentDescription = "Копировать текст")
+                }
+                IconButton(
+                    enabled = segments.isNotEmpty(),
+                    onClick = {
+                        scope.launch {
+                            val source = job?.let {
+                                graph.audioRepository.getSource(it.sourceId)?.source
+                            } ?: return@launch
+                            runCatching {
+                                TranscriptExporter(context).share(source, segments, ExportFormat.TXT)
+                            }.onSuccess { setStatus("Текст отправлен") }
+                                .onFailure { setStatus("Не удалось поделиться текстом") }
+                        }
+                    },
+                ) {
+                    Icon(Icons.Default.Share, contentDescription = "Поделиться текстом")
+                }
+                IconButton(
+                    enabled = segments.isNotEmpty(),
+                    onClick = { showExport = true },
+                ) {
+                    Icon(Icons.Default.FileDownload, contentDescription = "Экспортировать текст")
+                }
+            }
+        }
         if (visibleSegments.isEmpty()) {
             item {
                 Card(shape = localScribeShape, colors = localScribeCardColors()) {
@@ -1282,39 +1320,6 @@ private fun TranscriptScreen(
                         )
                     }
                 }
-            }
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = {
-                    clipboard.setText(AnnotatedString(segments.joinToString("\n") { it.text }))
-                }, enabled = segments.isNotEmpty()) {
-                    Text("Копировать")
-                }
-                Button(onClick = { showExport = true }) {
-                    Icon(Icons.Default.FileDownload, contentDescription = null)
-                    Text("Экспорт")
-                }
-            }
-        }
-        item {
-            OutlinedButton(
-                onClick = {
-                    scope.launch {
-                        val source =
-                            job?.let {
-                                graph.audioRepository.getSource(it.sourceId)?.source
-                            } ?: return@launch
-                        runCatching {
-                            TranscriptExporter(context).share(source, segments, ExportFormat.TXT)
-                        }.onSuccess { setStatus("Текст отправлен") }
-                            .onFailure { setStatus("Не удалось поделиться текстом") }
-                    }
-                },
-                enabled = segments.isNotEmpty(),
-            ) {
-                Icon(Icons.Default.Share, contentDescription = null)
-                Text("Поделиться")
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
