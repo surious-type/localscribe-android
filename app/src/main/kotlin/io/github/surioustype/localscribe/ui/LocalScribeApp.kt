@@ -888,6 +888,12 @@ private fun JobRow(
     val previewSegments by graph.liveTranscript
         .observe(job.id)
         .collectAsStateWithLifecycle(emptyList())
+    val visibleAudioMs =
+        if (job.status == JobStatus.RUNNING) {
+            displayedAudioProgressMs(completedDuration, previewSegments, totalDuration)
+        } else {
+            completedDuration
+        }
     Card(
         Modifier.fillMaxWidth(),
         colors = localScribeCardColors(),
@@ -906,10 +912,10 @@ private fun JobRow(
             )
             LocalScribeProgress(
                 progress =
-                    if (job.status == JobStatus.RUNNING && completedDuration == 0L) {
+                    if (job.status == JobStatus.RUNNING && visibleAudioMs == 0L) {
                         null
                     } else {
-                        completedDuration.toFloat() / totalDuration.toFloat()
+                        visibleAudioMs.toFloat() / totalDuration.toFloat()
                     },
             )
             if (job.status == JobStatus.RUNNING || job.status == JobStatus.PAUSED) {
@@ -922,7 +928,9 @@ private fun JobRow(
                 )
             }
             Text(
-                "Обработано аудио: " + formatAudioDuration(completedDuration) +
+                (if (visibleAudioMs > completedDuration) "Распознано (предварительно): "
+                 else "Обработано аудио: ") +
+                    formatAudioDuration(visibleAudioMs) +
                     " / " + formatAudioDuration(totalDuration),
                 style = MaterialTheme.typography.bodySmall,
             )
