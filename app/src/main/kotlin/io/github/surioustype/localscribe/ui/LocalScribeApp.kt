@@ -585,7 +585,13 @@ private fun SourceControls(
     val installedModelIds = transcriptionModels.map { it.descriptorId }.distinct()
     val vadModels = installedModels.filter { it.descriptorId == "silero-v6.2.0" }
     val selectedModel = savedUi.sourceModelId ?: installedModelIds.firstOrNull()
-    val selectedVad = savedUi.sourceVadModelId
+    // Prefer speech detection whenever its tiny model is installed; keep explicit opt-out.
+    val selectedVad =
+        when (savedUi.sourceVadModelId) {
+            "disabled" -> null
+            null -> vadModels.firstOrNull()?.descriptorId
+            else -> savedUi.sourceVadModelId
+        }
     val language = savedUi.sourceLanguage
     val message = savedUi.sourceMessage
     val beginTranscription: () -> Unit = begin@{
@@ -777,7 +783,7 @@ private fun SourceControls(
                             selectedModel,
                             language,
                             null,
-                            if (enabled) vadModels.firstOrNull()?.descriptorId else null,
+                            if (enabled) vadModels.firstOrNull()?.descriptorId else "disabled",
                         )
                     },
                     enabled = vadModels.isNotEmpty(),
