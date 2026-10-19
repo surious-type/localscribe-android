@@ -527,35 +527,20 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
     val context = LocalContext.current
     val jobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
     val sources by graph.audioRepository.observeSources().collectAsStateWithLifecycle(emptyList())
-    var filter by remember { mutableStateOf("active") }
-    val visible =
-        jobs.filter { job ->
-            when (filter) {
-                "active" ->
-                    job.status in
-                        setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
-                "done" -> job.status == JobStatus.COMPLETED
-                else -> job.status in setOf(JobStatus.CANCELLED, JobStatus.FAILED)
-            }
-        }
+    // Completed work stays visible instead of disappearing from the active-only filter.
+    val visible = jobs.filter { it.status != JobStatus.CANCELLED }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Text("Задачи", style = MaterialTheme.typography.headlineMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf("active" to "Активные", "done" to "Готовые", "history" to "История")
-                    .forEach { (value, label) ->
-                        FilterChip(
-                            selected = filter == value,
-                            onClick = { filter = value },
-                            label = { Text(label) },
-                        )
-                    }
-            }
+            Text("Транскрибации", style = MaterialTheme.typography.headlineMedium)
+            Text(
+                "Текущие и готовые записи",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         if (visible.isEmpty()) {
             item {
                 Card(colors = localScribeCardColors(), shape = localScribeShape) {
-                    Text("В этой категории пока нет задач.", Modifier.padding(20.dp))
+                    Text("Здесь появятся запущенные транскрибации.", Modifier.padding(20.dp))
                 }
             }
         }
@@ -565,8 +550,7 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
                 graph = graph,
                 context = context,
                 sourceName =
-                    sources
-                        .firstOrNull { it.source.id == job.sourceId }
+                    sources.firstOrNull { it.source.id == job.sourceId }
                         ?.source
                         ?.displayName,
                 showTranscript = { uiModel.showTranscript(job.id) },
@@ -957,7 +941,8 @@ private fun JobRow(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 if (job.status ==
                     JobStatus.RUNNING
                 ) {
@@ -1027,8 +1012,16 @@ private fun JobRow(
                         onClick = { scope.launch { graph.coordinator.cancel(job.id) } },
                     ) { Text("Остановить") }
                 }
+                }
                 if (job.status in setOf(JobStatus.COMPLETED, JobStatus.RUNNING, JobStatus.PAUSED)) {
-                    OutlinedButton(onClick = showTranscript) { Text("Текст") }
+                    OutlinedButton(
+                        onClick = showTranscript,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Открыть текст")
+                    }
                 }
             }
             actionMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
