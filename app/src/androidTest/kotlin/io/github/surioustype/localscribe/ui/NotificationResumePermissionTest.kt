@@ -90,7 +90,7 @@ class NotificationResumePermissionTest {
         }
         rule
             .onNodeWithText(
-                "The audio source is unavailable. Choose an accessible copy.",
+                "Запись недоступна. Выберите другую копию файла.",
             ).assertIsDisplayed()
         assertEquals(JobStatus.PAUSED, jobStatus(jobId))
     }

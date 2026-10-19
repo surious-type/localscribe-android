@@ -49,7 +49,7 @@ class NotificationPermissionRevocationPhaseTest {
                 .commit()
         }
         rule.activityRule.scenario.recreate()
-        rule.onNodeWithText("Ваши записи").assertIsDisplayed()
+        rule.onNodeWithText("Поиск записей…").assertIsDisplayed()
     }
 
     @Test
