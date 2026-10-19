@@ -904,8 +904,8 @@ private fun JobRow(
                             it.toString(),
                             true,
                         )
-                    }.onSuccess { actionMessage = "Audio relinked. Resume to continue." }
-                        .onFailure { actionMessage = "Could not relink this audio source." }
+                    }.onSuccess { actionMessage = "Доступ восстановлен. Продолжите обработку." }
+                        .onFailure { actionMessage = "Не удалось открыть выбранную запись." }
                 }
             }
         }
@@ -992,13 +992,19 @@ private fun JobRow(
                     color = MaterialTheme.colorScheme.error,
                 )
             }
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
                 if (job.status ==
                     JobStatus.RUNNING
                 ) {
-                    OutlinedButton(
+                    IconButton(
                         onClick = { scope.launch { graph.coordinator.pause(job.id) } },
-                    ) { Text("Пауза") }
+                    ) {
+                        Icon(Icons.Default.Pause, contentDescription = "Приостановить обработку")
+                    }
                 }
                 if (job.status == JobStatus.PAUSED || job.status == JobStatus.PENDING) {
                     val resume: () -> Unit = {
@@ -1018,10 +1024,10 @@ private fun JobRow(
                             TranscriptionStartResult.STARTED -> Unit
                             TranscriptionStartResult.NOTIFICATION_PERMISSION_REQUIRED ->
                                 actionMessage =
-                                    "Notification permission is needed for visible transcription controls. Allow it and resume again."
+                                    "Разрешите уведомления для управления обработкой в фоне."
                             TranscriptionStartResult.SERVICE_START_FAILED ->
                                 actionMessage =
-                                    "The transcription service could not resume. Your paused job is still available."
+                                    "Не удалось продолжить обработку. Сохранённые части остаются доступными."
                         }
                     }
                     val notificationPermission =
@@ -1032,10 +1038,10 @@ private fun JobRow(
                                 resume()
                             } else {
                                 actionMessage =
-                                    "Notification permission is needed for visible transcription controls. Allow it and resume again."
+                                    "Разрешите уведомления для управления обработкой в фоне."
                             }
                         }
-                    Button(onClick = {
+                    IconButton(onClick = {
                         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                             ContextCompat.checkSelfPermission(
                                 context,
@@ -1047,30 +1053,33 @@ private fun JobRow(
                         } else {
                             resume()
                         }
-                    }) { Text("Продолжить") }
-                    if (job.failure?.code?.name in
-                        setOf("SOURCE_PERMISSION_REQUIRED", "SOURCE_MISSING")
-                    ) {
-                        Text("Choose the same recording to keep the completed transcript parts.")
-                        OutlinedButton(onClick = { relinkAudio.launch(arrayOf("audio/*")) }) {
-                            Text("Reauthorize or relink audio")
-                        }
+                    }) {
+                        Icon(Icons.Default.PlayArrow, contentDescription = "Продолжить")
                     }
                 }
                 if (job.status in setOf(JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED)) {
-                    OutlinedButton(
+                    IconButton(
                         onClick = { scope.launch { graph.coordinator.cancel(job.id) } },
-                    ) { Text("Остановить") }
+                    ) {
+                        Icon(Icons.Default.Close, contentDescription = "Остановить обработку")
+                    }
                 }
                 if (job.status in setOf(JobStatus.COMPLETED, JobStatus.RUNNING, JobStatus.PAUSED)) {
-                    OutlinedButton(
-                        onClick = showTranscript,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Icon(Icons.Default.Description, contentDescription = null)
-                        Spacer(Modifier.width(8.dp))
-                        Text("Открыть текст")
+                    IconButton(onClick = showTranscript) {
+                        Icon(Icons.Default.Description, contentDescription = "Открыть текст")
                     }
+                }
+            }
+            if (job.status == JobStatus.PAUSED &&
+                job.failure?.code?.name in
+                setOf("SOURCE_PERMISSION_REQUIRED", "SOURCE_MISSING")
+            ) {
+                Text(
+                    "Выберите исходную запись повторно, чтобы сохранить готовые фрагменты.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedButton(onClick = { relinkAudio.launch(arrayOf("audio/*")) }) {
+                    Text("Восстановить доступ к записи")
                 }
             }
             actionMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
