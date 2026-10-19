@@ -880,11 +880,11 @@ private fun JobRow(
                     },
             )
             if (job.status == JobStatus.RUNNING || job.status == JobStatus.PAUSED) {
+                val remainingText =
+                    timing.remainingMs?.let { "~" + formatAudioDuration(it) } ?: "рассчитываем…"
                 Text(
                     "Прошло: " + formatAudioDuration(timing.elapsedMs) +
-                        " · Осталось: " +
-                        (timing.remainingMs?.let { "~" + formatAudioDuration(it) }
-                            ?: "рассчитываем…"),
+                        " · Осталось: " + remainingText,
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
@@ -895,8 +895,11 @@ private fun JobRow(
             )
             if (savedSegments.isNotEmpty() || previewSegments.isNotEmpty()) {
                 Text(
-                    if (previewSegments.isNotEmpty()) "Текст появляется в реальном времени"
-                    else "Уже распознано",
+                    if (previewSegments.isNotEmpty()) {
+                        "Текст появляется в реальном времени"
+                    } else {
+                        "Уже распознано"
+                    },
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
