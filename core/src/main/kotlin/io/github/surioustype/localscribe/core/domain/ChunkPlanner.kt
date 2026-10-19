@@ -28,7 +28,19 @@ class ChunkPlanner {
                 if (remainingMs <= config.chunkDurationMs) {
                     sourceDurationMs
                 } else {
-                    startMs + config.chunkDurationMs
+                    val regularEnd = startMs + config.chunkDurationMs
+                    val nextStart = regularEnd - config.overlapMs
+                    // Avoid a terminal window containing almost only repeated overlap.
+                    // At most 2.5 seconds are appended to the preceding window.
+                    if (sourceDurationMs - regularEnd > 0L &&
+                        sourceDurationMs - regularEnd <= 2_500L
+                    ) {
+                        sourceDurationMs
+                    } else if (sourceDurationMs - nextStart <= config.overlapMs) {
+                        sourceDurationMs
+                    } else {
+                        regularEnd
+                    }
                 }
             chunks +=
                 TranscriptionChunk(
