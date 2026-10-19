@@ -35,6 +35,12 @@ jobs:
           bash scripts/version/test-validate-release.sh && ./gradlew --stacktrace staticAnalysis :core:test :app:testGithubDebugUnitTest
           :app:testPlayDebugUnitTest :app:lintGithubDebug :app:lintPlayDebug
           :app:assembleGithubDebug :app:assemblePlayDebug
+      - name: Verify signed installable APK
+        run: |
+          apk="app/build/outputs/apk/github/debug/app-github-debug.apk"
+          "$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --verbose "$apk"
+          "$ANDROID_HOME/build-tools/36.0.0/aapt" dump badging "$apk" | grep '^package: name='
+          sha256sum "$apk"
       - name: Upload GitHub debug APK
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
