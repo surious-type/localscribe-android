@@ -846,12 +846,9 @@ private fun JobRow(
                 }
             }
         }
-    val totalDuration = (chunks.maxOfOrNull { it.endMs } ?: 0L).coerceAtLeast(1L)
-    val completedDuration =
-        chunks
-            .filter {
-                it.status.name == "COMPLETED"
-            }.maxOfOrNull { it.endMs } ?: 0L
+    val timing = transcriptionTiming(chunks, now)
+    val totalDuration = timing.totalAudioMs.coerceAtLeast(1L)
+    val completedDuration = timing.completedAudioMs
     val savedSegments by graph.transcriptionRepository
         .observeSegments(job.id)
         .collectAsStateWithLifecycle(emptyList())
@@ -879,15 +876,17 @@ private fun JobRow(
                         completedDuration.toFloat() / totalDuration.toFloat()
                     },
             )
-            if (job.status == JobStatus.RUNNING) {
-                val elapsed = (now - job.updatedAtEpochMs).coerceAtLeast(0L)
+            if (job.status == JobStatus.RUNNING || job.status == JobStatus.PAUSED) {
                 Text(
-                    "Текущий запуск: " + formatAudioDuration(elapsed),
+                    "Прошло: " + formatAudioDuration(timing.elapsedMs) +
+                        " · Осталось: " +
+                        (timing.remainingMs?.let { "~" + formatAudioDuration(it) }
+                            ?: "рассчитываем…"),
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
             Text(
-                "Обработано: " + formatAudioDuration(completedDuration) +
+                "Обработано аудио: " + formatAudioDuration(completedDuration) +
                     " / " + formatAudioDuration(totalDuration),
                 style = MaterialTheme.typography.bodySmall,
             )
