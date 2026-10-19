@@ -12,7 +12,6 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
-import androidx.compose.foundation.layout.Alignment
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -72,6 +71,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
 import androidx.compose.ui.platform.LocalContext
@@ -1577,7 +1577,7 @@ private fun Models(
                                 )
                             }
                         }
-                        if (transfer.canDelete) {
+                        if (saved != null && transfer.canDelete) {
                             IconButton(
                                 enabled = !controller.isBusy,
                                 onClick = {
@@ -1776,7 +1776,7 @@ private fun Models(
                                 )
                             }
                         }
-                        if (transfer.canDelete) {
+                        if (saved != null && transfer.canDelete) {
                             IconButton(onClick = {
                                 scope.launch {
                                     runCatching { graph.modelFiles.delete(model.id) }
