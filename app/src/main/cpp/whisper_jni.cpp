@@ -159,6 +159,59 @@ void progress_callback(whisper_context *, whisper_state *, int, void * user_data
     cancellation_requested(static_cast<CancellationState *>(user_data));
 }
 
+/**
+ * Preview segments are delivered before whisper_full completes. JNI listeners receive only
+ * provisional data; the coordinator commits the final output after the full chunk succeeds.
+ */
+struct SegmentCallbackState {
+    JavaVM * vm;
+    jobject listener;
+    EngineHandle * handle;
+};
+
+void new_segment_callback(whisper_context * context, whisper_state *, int added, void * user_data) {
+    auto * state = static_cast<SegmentCallbackState *>(user_data);
+    if (state == nullptr || state->listener == nullptr || added <= 0) return;
+    JNIEnv * env = nullptr;
+    bool attached = false;
+    const jint status = state->vm->GetEnv(reinterpret_cast<void **>(&env), JNI_VERSION_1_6);
+    if (status == JNI_EDETACHED) {
+        if (state->vm->AttachCurrentThread(&env, nullptr) != JNI_OK) {
+            state->handle->abort_requested.store(true, std::memory_order_relaxed);
+            return;
+        }
+        attached = true;
+    } else if (status != JNI_OK) {
+        state->handle->abort_requested.store(true, std::memory_order_relaxed);
+        return;
+    }
+    const jclass type = env->GetObjectClass(state->listener);
+    const jmethodID notify = env->GetMethodID(type, "onSegment", "(JJLjava/lang/String;)V");
+    if (notify != nullptr) {
+        const int count = whisper_full_n_segments(context);
+        const int first = count > added ? count - added : 0;
+        for (int i = first; i < count; ++i) {
+            const char * text = whisper_full_get_segment_text(context, i);
+            const jstring java_text = env->NewStringUTF(text == nullptr ? "" : text);
+            if (java_text == nullptr) break;
+            env->CallVoidMethod(
+                state->listener,
+                notify,
+                static_cast<jlong>(whisper_full_get_segment_t0(context, i) * 10),
+                static_cast<jlong>(whisper_full_get_segment_t1(context, i) * 10),
+                java_text);
+            env->DeleteLocalRef(java_text);
+            if (env->ExceptionCheck()) break;
+        }
+    }
+    if (env->ExceptionCheck()) {
+        env->ExceptionClear();
+        state->handle->abort_requested.store(true, std::memory_order_relaxed);
+    }
+    if (type != nullptr) env->DeleteLocalRef(type);
+    if (attached) state->vm->DetachCurrentThread();
+}
+
 jobject make_result(JNIEnv * env, whisper_context * context) {
     const jclass list_class = env->FindClass("java/util/ArrayList");
     const jmethodID list_constructor = env->GetMethodID(list_class, "<init>", "(I)V");
@@ -255,14 +308,13 @@ Java_io_github_surioustype_localscribe_engine_JniWhisperNativeBridge_load(
     return 0;
 }
 
-extern "C" JNIEXPORT jobject JNICALL
-Java_io_github_surioustype_localscribe_engine_JniWhisperNativeBridge_transcribe(
+static jobject transcribe_internal(
     JNIEnv * env,
-    jobject,
     jlong handle_id,
     jfloatArray pcm,
     jobject request,
-    jobject cancellation_signal) {
+    jobject cancellation_signal,
+    jobject segment_listener) {
     const auto handle = find_handle(handle_id);
     if (handle == nullptr || pcm == nullptr || request == nullptr || cancellation_signal == nullptr) {
         throw_native_error(env, native_error_failure);
@@ -286,6 +338,13 @@ Java_io_github_surioustype_localscribe_engine_JniWhisperNativeBridge_transcribe(
     JavaVM * vm = nullptr;
     env->GetJavaVM(&vm);
     CancellationState cancellation{vm, signal, is_cancelled, handle.get()};
+    jobject listener = segment_listener == nullptr ? nullptr : env->NewGlobalRef(segment_listener);
+    SegmentCallbackState streaming{vm, listener, handle.get()};
+    const auto release_references = [&]() {
+        env->ReleaseFloatArrayElements(pcm, samples, JNI_ABORT);
+        env->DeleteGlobalRef(signal);
+        if (listener != nullptr) env->DeleteGlobalRef(listener);
+    };
 
     try {
         whisper_full_params params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
@@ -319,14 +378,17 @@ Java_io_github_surioustype_localscribe_engine_JniWhisperNativeBridge_transcribe(
         params.encoder_begin_callback_user_data = &cancellation;
         params.progress_callback = progress_callback;
         params.progress_callback_user_data = &cancellation;
+        if (listener != nullptr) {
+            params.new_segment_callback = new_segment_callback;
+            params.new_segment_callback_user_data = &streaming;
+        }
 
         const int result = whisper_full(
             handle->context.get(),
             params,
             samples,
             env->GetArrayLength(pcm));
-        env->ReleaseFloatArrayElements(pcm, samples, JNI_ABORT);
-        env->DeleteGlobalRef(signal);
+        release_references();
         if (result != 0) {
             throw_native_error(
                 env,
@@ -337,15 +399,36 @@ Java_io_github_surioustype_localscribe_engine_JniWhisperNativeBridge_transcribe(
         }
         return make_result(env, handle->context.get());
     } catch (const std::bad_alloc &) {
-        env->ReleaseFloatArrayElements(pcm, samples, JNI_ABORT);
-        env->DeleteGlobalRef(signal);
+        release_references();
         throw_native_error(env, native_error_out_of_memory);
     } catch (...) {
-        env->ReleaseFloatArrayElements(pcm, samples, JNI_ABORT);
-        env->DeleteGlobalRef(signal);
+        release_references();
         throw_native_error(env, native_error_failure);
     }
     return nullptr;
+}
+
+extern "C" JNIEXPORT jobject JNICALL
+Java_io_github_surioustype_localscribe_engine_JniWhisperNativeBridge_transcribe(
+    JNIEnv * env,
+    jobject,
+    jlong handle_id,
+    jfloatArray pcm,
+    jobject request,
+    jobject cancellation_signal) {
+    return transcribe_internal(env, handle_id, pcm, request, cancellation_signal, nullptr);
+}
+
+extern "C" JNIEXPORT jobject JNICALL
+Java_io_github_surioustype_localscribe_engine_JniWhisperNativeBridge_transcribeStreaming(
+    JNIEnv * env,
+    jobject,
+    jlong handle_id,
+    jfloatArray pcm,
+    jobject request,
+    jobject cancellation_signal,
+    jobject segment_listener) {
+    return transcribe_internal(env, handle_id, pcm, request, cancellation_signal, segment_listener);
 }
 
 extern "C" JNIEXPORT void JNICALL
