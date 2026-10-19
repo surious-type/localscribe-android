@@ -1789,7 +1789,7 @@ private fun Settings(
                     awaitingUnknownSourcesReturn = false
                     installReturnMessage =
                         "Разрешение на установку проверено. Нажмите «Установить обновление» " +
-                            "для продолжения или отмените установку."
+                        "для продолжения или отмените установку."
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
