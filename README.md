@@ -60,3 +60,9 @@ approve that security-sensitive action. Then create a GitHub Environment named
 and `ANDROID_KEY_PASSWORD`. The workflow creates and verifies
 `localscribe-vX.Y.Z.apk` plus `localscribe-vX.Y.Z.apk.sha256`. See
 [docs/build-and-release.md](docs/build-and-release.md) for setup details.
+
+## v0.2 development
+
+The `main` branch contains the revised Russian Material 3 UX foundation. Development
+continues in small verified changes; the Android CI workflow builds a signed debug APK
+for testing. Production releases require separate signing credentials.
