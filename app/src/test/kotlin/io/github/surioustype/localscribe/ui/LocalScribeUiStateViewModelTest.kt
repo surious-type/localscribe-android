@@ -8,6 +8,26 @@ import org.junit.Test
 
 class LocalScribeUiStateViewModelTest {
     @Test
+    fun pendingDownloadRemainsLatchedWhenSwitchingTabs() {
+        val model = LocalScribeUiStateViewModel(SavedStateHandle())
+        model.requestModelDownload("tiny")
+        model.selectDestination("MODELS")
+        model.selectDestination("HOME")
+        assertEquals(setOf("tiny"), model.pendingModelDownloads)
+        model.reconcileModelDownloadRequests(setOf("tiny"))
+        assertTrue(model.pendingModelDownloads.isEmpty())
+    }
+
+    @Test
+    fun downloadFailureClearsOnlyAffectedModel() {
+        val model = LocalScribeUiStateViewModel(SavedStateHandle())
+        model.requestModelDownload("small")
+        model.requestModelDownload("silero-v6.2.0")
+        model.clearModelDownloadRequest("small")
+        assertEquals(setOf("silero-v6.2.0"), model.pendingModelDownloads)
+    }
+
+    @Test
     fun `inbound shared audio is consumed once after state recreation`() {
         val state = SavedStateHandle()
         val first = LocalScribeUiStateViewModel(state)

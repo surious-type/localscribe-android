@@ -1489,16 +1489,14 @@ private fun Models(
     val controller = uiModel.benchmarkController
     var actionModelId by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
-    var pendingDownloads by remember { mutableStateOf(emptySet<String>()) }
+    val pendingDownloads = uiModel.pendingModelDownloads
     LaunchedEffect(downloads, installed) {
         // As soon as an observable transfer or installed model appears,
         // the durable manager, rather than this short UI latch, owns its state.
-        pendingDownloads =
-            pendingDownloads
-                .filterNot { modelId ->
-                    downloads.any { it.modelId == modelId } ||
-                        installed.any { it.descriptorId == modelId }
-                }.toSet()
+        uiModel.reconcileModelDownloadRequests(
+            downloads.map { it.modelId }.toSet() +
+                installed.map { it.descriptorId }.toSet(),
+        )
     }
     var testElapsed by remember { mutableStateOf(controller.elapsedMs()) }
     LaunchedEffect(controller.isBusy) {
@@ -1557,7 +1555,7 @@ private fun Models(
                             IconButton(onClick = {
                                 actionModelId = model.id
                                 actionError = null
-                                pendingDownloads = pendingDownloads + model.id
+                                uiModel.requestModelDownload(model.id)
                                 scope.launch {
                                     runCatching {
                                         if (download?.status?.name in
@@ -1568,7 +1566,7 @@ private fun Models(
                                             graph.downloads.enqueue(model.id)
                                         }
                                     }.onFailure {
-                                        pendingDownloads = pendingDownloads - model.id
+                                        uiModel.clearModelDownloadRequest(model.id)
                                         actionError =
                                             "Не удалось начать загрузку. Попробуйте ещё раз."
                                     }
@@ -1743,7 +1741,7 @@ private fun Models(
                             IconButton(onClick = {
                                 actionModelId = model.id
                                 actionError = null
-                                pendingDownloads = pendingDownloads + model.id
+                                uiModel.requestModelDownload(model.id)
                                 scope.launch {
                                     runCatching {
                                         if (download?.status?.name in
@@ -1754,7 +1752,7 @@ private fun Models(
                                             graph.downloads.enqueue(model.id)
                                         }
                                     }.onFailure {
-                                        pendingDownloads = pendingDownloads - model.id
+                                        uiModel.clearModelDownloadRequest(model.id)
                                         actionError =
                                             "Не удалось скачать VAD. Проверьте сеть и повторите."
                                     }

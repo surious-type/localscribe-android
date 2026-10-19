@@ -1,5 +1,8 @@
 package io.github.surioustype.localscribe.ui
 
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -12,6 +15,23 @@ class LocalScribeUiStateViewModel(
     private val state: SavedStateHandle,
 ) : ViewModel() {
     val benchmarkController = BenchmarkRunController(viewModelScope)
+
+    // A tab change must not show the download action again before the repository
+    // publishes its first durable download state.
+    var pendingModelDownloads by mutableStateOf(emptySet<String>())
+        private set
+
+    fun requestModelDownload(modelId: String) {
+        pendingModelDownloads = pendingModelDownloads + modelId
+    }
+
+    fun clearModelDownloadRequest(modelId: String) {
+        pendingModelDownloads = pendingModelDownloads - modelId
+    }
+
+    fun reconcileModelDownloadRequests(acknowledgedIds: Set<String>) {
+        pendingModelDownloads = pendingModelDownloads - acknowledgedIds
+    }
     private val destinationHistory =
         (state.get<ArrayList<String>>(DESTINATION_HISTORY) ?: arrayListOf()).toMutableList()
     private val mutable =
