@@ -1627,8 +1627,9 @@ private fun Models(
                     }
                     if (qualityModelId == model.id && savedUi.qualityResult != null) {
                         Text(
-                            "Качество теста: " + (savedUi.benchmarkStatus ?: "готово") +
-                                " (меньше ошибок — лучше)",
+                            "Тест английской речи: " + (savedUi.benchmarkStatus ?: "готово") +
+                                ". WER — доля ошибок в словах, CER — в символах; " +
+                                "чем меньше, тем лучше.",
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
@@ -1787,7 +1788,8 @@ private fun Settings(
                 if (event == Lifecycle.Event.ON_RESUME && awaitingUnknownSourcesReturn) {
                     awaitingUnknownSourcesReturn = false
                     installReturnMessage =
-                        "Unknown-source access returned. Tap Install update to continue, or keep it disabled to cancel."
+                        "Разрешение на установку проверено. Нажмите «Установить обновление» " +
+                            "для продолжения или отмените установку."
                 }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -1805,7 +1807,10 @@ private fun Settings(
         }
         item {
             Text("Тема")
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 AppearanceMode.entries.forEach { mode ->
                     FilterChip(
                         selected = appearanceMode == mode,
