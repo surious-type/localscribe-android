@@ -177,12 +177,21 @@ class TranscriptionService : Service() {
     }
 
     private suspend fun updateNotification(jobId: String, completedMs: Long, totalMs: Long) {
+        // Notifications must remain available when the recording is revoked,
+        // deleted, or temporarily inaccessible. Source verification belongs in
+        // the coordinator, not in this presentation-only update.
         val sourceName =
-            dependencies.repository.getJob(jobId)?.let { job ->
-                dependencies.audioRepository
-                    .getSource(job.sourceId)
-                    ?.source
-                    ?.displayName
+            try {
+                dependencies.repository.getJob(jobId)?.let { job ->
+                    dependencies.audioRepository
+                        .getSource(job.sourceId)
+                        ?.source
+                        ?.displayName
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                null
             } ?: getString(R.string.transcription_notification_title)
         val notification = notification(jobId, sourceName, completedMs, totalMs)
         getSystemService(NotificationManager::class.java).notify(NOTIFICATION_ID, notification)
