@@ -24,7 +24,7 @@ class AudioSignalGuardTest {
         assertFalse(window.isSilent)
         assertTrue(window.effectiveDurationMs in 3_400L..3_600L)
         assertTrue(window.trimmedTailMs > 16_000L)
-        assertEquals(0.15f, window.pcm[16_000 * 3 - 1])
+        assertEquals(0.15f, window.pcm[16_000 * 3 - 1], 0.0001f)
     }
 
     @Test

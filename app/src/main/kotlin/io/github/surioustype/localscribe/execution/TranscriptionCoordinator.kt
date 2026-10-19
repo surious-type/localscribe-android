@@ -287,9 +287,11 @@ class TranscriptionCoordinator(
                                 .filter { segment ->
                                     // Never commit text timestamped entirely beyond the
                                     // decoded speech-bearing window after silence trimming.
-                                    segment.startMs < prepared.effectiveDurationMs
+                                    segment.startMs < prepared.effectiveDurationMs &&
+                                        segment.endMs > segment.startMs
                                 }.mapIndexed { index, segment ->
-                                    val duration = chunk.endMs - chunk.startMs
+                                    val duration =
+                                        minOf(chunk.endMs - chunk.startMs, prepared.effectiveDurationMs)
                                     TranscriptSegment(
                                         id = "${chunk.id}:$index",
                                         chunkId = chunk.id,

@@ -73,7 +73,7 @@ class WhisperTranscriptionEngineTest {
             engine.unloadModel()
 
             assertEquals(vad.filePath, bridge.lastRequest?.vadModelPath)
-            assertEquals(0.5f, bridge.lastRequest?.vadThreshold)
+            assertEquals(0.5f, bridge.lastRequest?.vadThreshold ?: 0f, 0.0001f)
         }
 
     @Test
