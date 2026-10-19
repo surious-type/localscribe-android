@@ -234,7 +234,7 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                 when {
                     savedUi.transcriptJobId != null ->
                         TranscriptScreen(
-                            savedUi.transcriptJobId,
+                            requireNotNull(savedUi.transcriptJobId),
                             graph,
                             savedUi.transcriptQuery,
                             savedUi.exportFormat,
@@ -251,7 +251,7 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                         LazyColumn {
                             item {
                                 SourceControls(
-                                    savedUi.selectedSourceId,
+                                    requireNotNull(savedUi.selectedSourceId),
                                     installed,
                                     graph,
                                     context,
