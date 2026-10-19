@@ -51,12 +51,30 @@ class WhisperTranscriptionEngine(
         }
     }
 
-    @OptIn(InternalCoroutinesApi::class)
     override suspend fun transcribe(
         pcm: FloatArray,
         config: InferenceConfig,
         prompt: String?,
         cancellationSignal: CancellationSignal,
+    ): TranscriptionResult =
+        transcribeInternal(pcm, config, prompt, cancellationSignal, null)
+
+    override suspend fun transcribeStreaming(
+        pcm: FloatArray,
+        config: InferenceConfig,
+        prompt: String?,
+        cancellationSignal: CancellationSignal,
+        onSegment: (EngineSegment) -> Unit,
+    ): TranscriptionResult =
+        transcribeInternal(pcm, config, prompt, cancellationSignal, onSegment)
+
+    @OptIn(InternalCoroutinesApi::class)
+    private suspend fun transcribeInternal(
+        pcm: FloatArray,
+        config: InferenceConfig,
+        prompt: String?,
+        cancellationSignal: CancellationSignal,
+        onSegment: ((EngineSegment) -> Unit)?,
     ): TranscriptionResult =
         lifecycleMutex.withLock {
             require(config.threadCount > 0) { "threadCount must be positive" }
@@ -112,18 +130,32 @@ class WhisperTranscriptionEngine(
                     try {
                         withContext(ioDispatcher) {
                             nativeBoundary("native_transcription_failed") {
-                                bridge.transcribe(
-                                    context.handle,
-                                    pcm,
-                                    request,
+                                val nativeCancellation =
                                     NativeCancellationSignal {
                                         val requestedCancellation =
                                             cancelled.get() ||
                                                 cancellationSignal.isCancellationRequested()
                                         if (requestedCancellation) bridge.abort(context.handle)
                                         requestedCancellation
-                                    },
-                                )
+                                    }
+                                if (onSegment == null) {
+                                    bridge.transcribe(
+                                        context.handle,
+                                        pcm,
+                                        request,
+                                        nativeCancellation,
+                                    )
+                                } else {
+                                    bridge.transcribeStreaming(
+                                        context.handle,
+                                        pcm,
+                                        request,
+                                        nativeCancellation,
+                                        NativeSegmentListener { startMs, endMs, text ->
+                                            onSegment(EngineSegment(startMs, endMs, text))
+                                        },
+                                    )
+                                }
                             }
                         }
                     } catch (error: WhisperEngineException) {
