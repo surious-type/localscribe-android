@@ -50,6 +50,33 @@ class WhisperTranscriptionEngineTest {
         }
 
     @Test
+    fun `verified Silero VAD is forwarded to the native request`() =
+        runTest {
+            val model =
+                installedModel(temporaryFolder.newFile("tiny.bin").apply { writeText("model") })
+            val vad =
+                installedModel(temporaryFolder.newFile("silero.bin").apply { writeText("vad") })
+                    .copy(descriptorId = "silero-v6.2.0")
+            val bridge = FakeWhisperNativeBridge()
+            val engine = WhisperTranscriptionEngine(Dispatchers.Unconfined, bridge)
+
+            engine.loadModel(model, vad)
+            engine.transcribe(
+                floatArrayOf(0.1f),
+                InferenceConfig(
+                    threadCount = 2,
+                    vad = VadConfig(vad.descriptorId, vad.sha256),
+                ),
+                null,
+                CancellationSignal { false },
+            )
+            engine.unloadModel()
+
+            assertEquals(vad.filePath, bridge.lastRequest?.vadModelPath)
+            assertEquals(0.5f, bridge.lastRequest?.vadThreshold)
+        }
+
+    @Test
     fun `rejects configured VAD when no verified VAD model was loaded`() =
         runTest {
             val model =
@@ -199,6 +226,7 @@ class WhisperTranscriptionEngineTest {
     ) : WhisperNativeBridge {
         var loadCount = 0
         var unloadCount = 0
+        var lastRequest: NativeTranscriptionRequest? = null
 
         @Volatile var abortCalled = false
 
@@ -218,6 +246,7 @@ class WhisperTranscriptionEngineTest {
             request: NativeTranscriptionRequest,
             cancellationSignal: NativeCancellationSignal,
         ): NativeTranscriptionResult {
+            lastRequest = request
             transcribeFailure?.let { throw it }
             transcriptionStarted = true
             transcriptionRunning = true

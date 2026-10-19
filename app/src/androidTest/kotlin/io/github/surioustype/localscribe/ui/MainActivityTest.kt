@@ -2,6 +2,7 @@ package io.github.surioustype.localscribe.ui
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import io.github.surioustype.localscribe.MainActivity
@@ -31,12 +32,13 @@ class MainActivityTest {
 
     @Test fun navigationShowsModelsAndSettings() {
         rule.onNodeWithText("Начать").performClick()
-        rule.onNodeWithText("Модели").performClick()
-        rule
-            .onNodeWithText(
-                "Модели работают локально и скачиваются только по вашему запросу.",
-            ).assertIsDisplayed()
-        rule.onNodeWithText("Настройки").performClick()
+        rule.onNodeWithContentDescription("Модели").performClick()
+        rule.onNodeWithText("Локальные модели").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Настройки").performClick()
         rule.onNodeWithText("Проверять обновления автоматически").assertIsDisplayed()
+        rule.activityRule.scenario.onActivity {
+            it.onBackPressedDispatcher.onBackPressed()
+        }
+        rule.onNodeWithText("Локальные модели").assertIsDisplayed()
     }
 }
