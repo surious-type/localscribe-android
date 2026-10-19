@@ -28,20 +28,20 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material.icons.filled.Science
-import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
+import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -106,9 +106,9 @@ import io.github.surioustype.localscribe.di.AppPreferences
 import io.github.surioustype.localscribe.service.TranscriptionService
 import io.github.surioustype.localscribe.ui.playback.AndroidMediaPlayerBackend
 import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackController
+import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import java.util.UUID
 
 private enum class Destination { HOME, PROCESSING, MODELS, SETTINGS }
 
@@ -553,7 +553,8 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
                 graph = graph,
                 context = context,
                 sourceName =
-                    sources.firstOrNull { it.source.id == job.sourceId }
+                    sources
+                        .firstOrNull { it.source.id == job.sourceId }
                         ?.source
                         ?.displayName,
                 showTranscript = { uiModel.showTranscript(job.id) },
@@ -1234,13 +1235,21 @@ private fun TranscriptScreen(
                     enabled = segments.isNotEmpty(),
                     onClick = {
                         scope.launch {
-                            val source = job?.let {
-                                graph.audioRepository.getSource(it.sourceId)?.source
-                            } ?: return@launch
+                            val source =
+                                job?.let {
+                                    graph.audioRepository.getSource(it.sourceId)?.source
+                                } ?: return@launch
                             runCatching {
-                                TranscriptExporter(context).share(source, segments, ExportFormat.TXT)
-                            }.onSuccess { setStatus("Текст отправлен") }
-                                .onFailure { setStatus("Не удалось поделиться текстом") }
+                                TranscriptExporter(context).share(
+                                    source,
+                                    segments,
+                                    ExportFormat.TXT,
+                                )
+                            }.onSuccess {
+                                setStatus("Текст отправлен")
+                            }.onFailure {
+                                setStatus("Не удалось поделиться текстом")
+                            }
                         }
                     },
                 ) {
@@ -1387,10 +1396,14 @@ private fun Models(
     val scope = rememberCoroutineScope()
     val catalog by graph.catalog.observeCatalog().collectAsStateWithLifecycle(emptyList())
     val downloads by graph.downloads.observeDownloads().collectAsStateWithLifecycle(emptyList())
-    val installed by graph.installedModels.observeInstalledModels()
+    val installed by graph.installedModels
+        .observeInstalledModels()
         .collectAsStateWithLifecycle(emptyList())
-    val benchmarks by graph.benchmark.observeBenchmarks().collectAsStateWithLifecycle(emptyList())
-    val runState by graph.benchmark.observeRunState()
+    val benchmarks by graph.benchmark
+        .observeBenchmarks()
+        .collectAsStateWithLifecycle(emptyList())
+    val runState by graph.benchmark
+        .observeRunState()
         .collectAsStateWithLifecycle(
             io.github.surioustype.localscribe.benchmark.BenchmarkRunState(),
         )
@@ -1424,13 +1437,14 @@ private fun Models(
         items(catalog.filter { it.kind == ModelKind.TRANSCRIPTION }, key = { it.id }) { model ->
             val saved = installed.firstOrNull { it.descriptorId == model.id }
             val download = downloads.firstOrNull { it.modelId == model.id }
-            val downloading = download?.status?.name in
-                setOf("QUEUED", "DOWNLOADING", "VERIFYING")
-            val result = benchmarks.firstOrNull {
-                it.modelId == model.id && it.modelHash.equals(saved?.sha256, true)
-            }
-            val testing = runState.phase.name == "RUNNING" &&
-                runState.modelId == model.id
+            val downloading =
+                download?.status?.name in setOf("QUEUED", "DOWNLOADING", "VERIFYING")
+            val result =
+                benchmarks.firstOrNull {
+                    it.modelId == model.id && it.modelHash.equals(saved?.sha256, true)
+                }
+            val testing =
+                runState.phase.name == "RUNNING" && runState.modelId == model.id
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = localScribeShape,
@@ -1469,17 +1483,23 @@ private fun Models(
                                 actionError = null
                                 scope.launch {
                                     runCatching {
-                                        if (download?.status?.name in setOf("CANCELLED", "FAILED")) {
+                                        if (download?.status?.name in
+                                            setOf("CANCELLED", "FAILED")
+                                        ) {
                                             graph.downloads.retry(model.id)
                                         } else {
                                             graph.downloads.enqueue(model.id)
                                         }
                                     }.onFailure {
-                                        actionError = "Не удалось начать загрузку. Попробуйте ещё раз."
+                                        actionError =
+                                            "Не удалось начать загрузку. Попробуйте ещё раз."
                                     }
                                 }
                             }) {
-                                Icon(Icons.Default.FileDownload, contentDescription = "Скачать модель")
+                                Icon(
+                                    Icons.Default.FileDownload,
+                                    contentDescription = "Скачать модель",
+                                )
                             }
                         }
                         if (saved != null) {
@@ -1505,7 +1525,9 @@ private fun Models(
                                                     quality.recognizedText,
                                                     quality.score.wordErrors,
                                                     quality.score.referenceWordCount,
-                                                    quality.differences.joinToString { it.kind.name },
+                                                    quality.differences.joinToString {
+                                                        it.kind.name
+                                                    },
                                                     "Тестовая английская речь",
                                                 ),
                                             )
@@ -1513,7 +1535,8 @@ private fun Models(
                                                 "WER " +
                                                     (quality.score.wordErrorRate * 100).toInt() +
                                                     "% · CER " +
-                                                    (quality.score.characterErrorRate * 100).toInt() + "%",
+                                                    (quality.score.characterErrorRate * 100)
+                                                        .toInt() + "%",
                                             )
                                         }.onFailure {
                                             actionError = "Тест качества не завершён."
@@ -1553,7 +1576,8 @@ private fun Models(
                                     scope.launch {
                                         runCatching { graph.modelFiles.delete(model.id) }
                                             .onFailure {
-                                                actionError = "Модель используется задачей или её не удалось удалить."
+                                                actionError =
+                                                    "Модель используется задачей или её не удалось удалить."
                                             }
                                     }
                                 },
@@ -1652,23 +1676,34 @@ private fun Models(
                                 actionError = null
                                 scope.launch {
                                     runCatching {
-                                        if (download?.status?.name in setOf("FAILED", "CANCELLED")) {
+                                        if (download?.status?.name in
+                                            setOf("FAILED", "CANCELLED")
+                                        ) {
                                             graph.downloads.retry(model.id)
                                         } else {
                                             graph.downloads.enqueue(model.id)
                                         }
                                     }.onFailure {
-                                        actionError = "Не удалось скачать VAD. Проверьте сеть и повторите."
+                                        actionError =
+                                            "Не удалось скачать VAD. Проверьте сеть и повторите."
                                     }
                                 }
                             }) {
-                                Icon(Icons.Default.FileDownload, contentDescription = "Скачать VAD")
+                                Icon(
+                                    Icons.Default.FileDownload,
+                                    contentDescription = "Скачать VAD",
+                                )
                             }
                         }
                         if (busy) {
                             IconButton(onClick = {
                                 scope.launch { graph.downloads.cancel(model.id) }
-                            }) { Icon(Icons.Default.Close, contentDescription = "Отменить загрузку VAD") }
+                            }) {
+                                Icon(
+                                    Icons.Default.Close,
+                                    contentDescription = "Отменить загрузку VAD",
+                                )
+                            }
                         }
                         if (saved != null) {
                             IconButton(onClick = {
@@ -1676,7 +1711,9 @@ private fun Models(
                                     runCatching { graph.modelFiles.delete(model.id) }
                                         .onFailure { actionError = "VAD используется задачей." }
                                 }
-                            }) { Icon(Icons.Default.Delete, contentDescription = "Удалить VAD") }
+                            }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Удалить VAD")
+                            }
                         }
                     }
                     if (busy) {
@@ -1771,23 +1808,23 @@ private fun Settings(
             Text("Тема")
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 AppearanceMode.entries.forEach { mode ->
-                FilterChip(
-                    selected = appearanceMode == mode,
-                    onClick = {
-                        appearanceMode = mode
-                        preferences.appearanceMode = mode.name
-                        setAppearanceMode(mode)
-                    },
-                    label = {
-                        Text(
-                            when (mode) {
-                                AppearanceMode.SYSTEM -> "Системная"
-                                AppearanceMode.LIGHT -> "Светлая"
-                                AppearanceMode.DARK -> "Тёмная"
-                            },
-                        )
-                    },
-                )
+                    FilterChip(
+                        selected = appearanceMode == mode,
+                        onClick = {
+                            appearanceMode = mode
+                            preferences.appearanceMode = mode.name
+                            setAppearanceMode(mode)
+                        },
+                        label = {
+                            Text(
+                                when (mode) {
+                                    AppearanceMode.SYSTEM -> "Системная"
+                                    AppearanceMode.LIGHT -> "Светлая"
+                                    AppearanceMode.DARK -> "Тёмная"
+                                },
+                            )
+                        },
+                    )
                 }
             }
         }
