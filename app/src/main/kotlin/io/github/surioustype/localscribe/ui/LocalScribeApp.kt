@@ -88,6 +88,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import io.github.surioustype.localscribe.BuildConfig
 import io.github.surioustype.localscribe.benchmark.AndroidHardwareProfile
 import io.github.surioustype.localscribe.benchmark.BenchmarkComparisons
+import io.github.surioustype.localscribe.benchmark.BenchmarkRunState
 import io.github.surioustype.localscribe.core.domain.ChunkPlanner
 import io.github.surioustype.localscribe.core.domain.TranscriptAssembler
 import io.github.surioustype.localscribe.core.model.AppVersion
@@ -106,9 +107,9 @@ import io.github.surioustype.localscribe.di.AppPreferences
 import io.github.surioustype.localscribe.service.TranscriptionService
 import io.github.surioustype.localscribe.ui.playback.AndroidMediaPlayerBackend
 import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackController
-import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import java.util.UUID
 
 private enum class Destination { HOME, PROCESSING, MODELS, SETTINGS }
 
@@ -1404,9 +1405,7 @@ private fun Models(
         .collectAsStateWithLifecycle(emptyList())
     val runState by graph.benchmark
         .observeRunState()
-        .collectAsStateWithLifecycle(
-            io.github.surioustype.localscribe.benchmark.BenchmarkRunState(),
-        )
+        .collectAsStateWithLifecycle(BenchmarkRunState())
     val controller = uiModel.benchmarkController
     var actionModelId by remember { mutableStateOf<String?>(null) }
     var qualityModelId by remember { mutableStateOf<String?>(null) }
