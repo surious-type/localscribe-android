@@ -35,10 +35,25 @@ jobs:
         run: |
           if [ -e /dev/kvm ]; then sudo chmod 666 /dev/kvm; fi
           avdmanager="$ANDROID_HOME/cmdline-tools/latest/bin/avdmanager"
-          echo no | "$avdmanager" create avd --force --name localscribe-api35 --package 'system-images;android-35;aosp_atd;x86_64'
-          "$ANDROID_HOME/emulator/emulator" -avd localscribe-api35 -no-window -no-audio -no-boot-anim -gpu swiftshader_indirect > emulator.log 2>&1 &
-          "$ANDROID_HOME/platform-tools/adb" wait-for-device
-          until [ "$("$ANDROID_HOME/platform-tools/adb" shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; do sleep 5; done
+          export ANDROID_AVD_HOME="$RUNNER_TEMP/localscribe-avds"
+          mkdir -p "$ANDROID_AVD_HOME"
+          echo no | "$avdmanager" create avd --force --name localscribe-api35 \
+            --path "$ANDROID_AVD_HOME/localscribe-api35.avd" \
+            --package 'system-images;android-35;aosp_atd;x86_64'
+          # Fail immediately if avdmanager wrote the profile to another HOME.
+          "$ANDROID_HOME/emulator/emulator" -list-avds | grep -Fx localscribe-api35
+          "$ANDROID_HOME/emulator/emulator" -avd localscribe-api35 -no-window -no-audio \
+            -no-boot-anim -no-snapshot -gpu swiftshader_indirect > emulator.log 2>&1 &
+          timeout 120 "$ANDROID_HOME/platform-tools/adb" wait-for-device
+          for attempt in $(seq 1 72); do
+            if [ "$("$ANDROID_HOME/platform-tools/adb" shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then
+              exit 0
+            fi
+            sleep 5
+          done
+          echo "Android emulator did not complete boot" >&2
+          tail -n 100 emulator.log
+          exit 1
       - name: Run device tests
         run: |
           ./gradlew :app:connectedGithubDebugAndroidTest --stacktrace
