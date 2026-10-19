@@ -37,6 +37,30 @@ import org.junit.Test
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class TranscriptionCoordinatorTest {
     @Test
+    fun `performance trace records stage costs without text or audio content`() =
+        runTest {
+            val messages = mutableListOf<String>()
+            val repository = FakeDurableRepository(job(), chunks())
+            val coordinator =
+                TranscriptionCoordinator(
+                    repository = repository,
+                    audioRepository = FakeAudioRepository(),
+                    installedModels = FakeInstalledModels(),
+                    audioPipeline = FakeAudioPipeline(),
+                    engine = FakeEngine(),
+                    executionMutex = Mutex(),
+                    diagnosticLog = messages::add,
+                )
+
+            assertEquals(ExecutionOutcome.Completed, coordinator.execute(JOB_ID))
+            assertTrue(messages.any { it.startsWith("phase=model_load") })
+            assertEquals(2, messages.count { it.startsWith("phase=chunk") })
+            assertTrue(messages.all { !it.contains("first") })
+            assertTrue(messages.any { it.contains("decodeMs=") && it.contains("inferenceMs=") })
+            assertTrue(messages.any { it.contains("thermal=") && it.contains("vad=") })
+        }
+
+    @Test
     fun `loads one model and stores engine timestamps as absolute exactly once`() =
         runTest {
             val repository = FakeDurableRepository(job(), chunks())

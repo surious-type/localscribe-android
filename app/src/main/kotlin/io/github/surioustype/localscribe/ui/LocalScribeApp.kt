@@ -1388,6 +1388,34 @@ private fun timestamp(value: Long): String =
         (value / 1_000) % 60,
     )
 
+/** Shared widget used for both phone and accessibility-width benchmark screens. */
+@Composable
+fun ModelBenchmarkRunningStatus(
+    stage: BenchmarkStep,
+    elapsedMs: Long,
+    onCancel: () -> Unit,
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        LocalScribeProgress(null)
+        Text(
+            when (stage) {
+                BenchmarkStep.WAITING_FOR_ENGINE -> "Ожидание свободного движка"
+                BenchmarkStep.PREPARING_AUDIO -> "Подготовка тестового аудио"
+                BenchmarkStep.LOADING_MODEL -> "Загрузка модели в память"
+                BenchmarkStep.RECOGNIZING -> "Распознавание тестовой речи"
+                BenchmarkStep.SAVING -> "Сохранение результатов теста"
+            } + " · прошло " + formatAudioDuration(elapsedMs),
+            style = MaterialTheme.typography.bodySmall,
+        )
+        OutlinedButton(
+            onClick = onCancel,
+            modifier = Modifier.semantics { contentDescription = "Отменить тест модели" },
+        ) {
+            Text("Отменить тест")
+        }
+    }
+}
+
 @Composable
 private fun Models(
     graph: AppGraph,
@@ -1589,20 +1617,11 @@ private fun Models(
                         }
                     }
                     if (testing) {
-                        LocalScribeProgress(null)
-                        Text(
-                            when (runState.step) {
-                                BenchmarkStep.WAITING_FOR_ENGINE -> "Ожидание свободного движка"
-                                BenchmarkStep.PREPARING_AUDIO -> "Подготовка тестового аудио"
-                                BenchmarkStep.LOADING_MODEL -> "Загрузка модели в память"
-                                BenchmarkStep.RECOGNIZING -> "Распознавание тестовой речи"
-                                BenchmarkStep.SAVING -> "Сохранение результатов теста"
-                            } + " · прошло " + formatAudioDuration(testElapsed),
-                            style = MaterialTheme.typography.bodySmall,
+                        ModelBenchmarkRunningStatus(
+                            stage = runState.step,
+                            elapsedMs = testElapsed,
+                            onCancel = controller::cancel,
                         )
-                        OutlinedButton(onClick = controller::cancel) {
-                            Text("Отменить тест")
-                        }
                     }
                     if (result != null) {
                         Text(
