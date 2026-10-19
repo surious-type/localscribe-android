@@ -39,7 +39,8 @@ fun transcriptionTiming(
     // Overlap must not count as additional audio when measuring throughput.
     var previousEnd = 0L
     val measurements =
-        committed.mapNotNull { chunk ->
+        committed
+            .mapNotNull { chunk ->
             val uniqueMs = (chunk.endMs - maxOf(previousEnd, chunk.startMs)).coerceAtLeast(0L)
             previousEnd = maxOf(previousEnd, chunk.endMs)
             val started = chunk.startedAtEpochMs
@@ -49,7 +50,8 @@ fun transcriptionTiming(
             } else {
                 uniqueMs to (ended - started)
             }
-        }.takeLast(3)
+            }
+            .takeLast(3)
     if (measurements.isEmpty()) {
         return TranscriptionTiming(elapsed, null, completed, total)
     }
@@ -59,9 +61,11 @@ fun transcriptionTiming(
     val measuredCompute = measurements.sumOf { it.second }
     val estimateMs =
         (measuredCompute.toDouble() * (total - completed) / measuredAudio)
-            .coerceIn(0.0, Long.MAX_VALUE.toDouble()).toLong()
+            .coerceIn(0.0, Long.MAX_VALUE.toDouble())
+            .toLong()
     val activeElapsed =
-        chunks.filter { it.status == ChunkStatus.PROCESSING }
+        chunks
+            .filter { it.status == ChunkStatus.PROCESSING }
             .sumOf { (nowEpochMs - (it.startedAtEpochMs ?: nowEpochMs)).coerceAtLeast(0L) }
     // When a chunk runs slower than the samples, stop claiming a false '0 seconds left'.
     val remaining = if (activeElapsed > estimateMs) null else estimateMs - activeElapsed

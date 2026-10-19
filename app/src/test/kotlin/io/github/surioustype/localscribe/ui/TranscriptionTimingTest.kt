@@ -86,9 +86,10 @@ class TranscriptionTimingTest {
 
     @Test
     fun `overlap does not bias completed audio duration`() {
-        val result = transcriptionTiming(
-            listOf(
-                chunk("a", 0, 20_000, ChunkStatus.COMPLETED, 1_000, 11_000),
+        val result =
+            transcriptionTiming(
+                listOf(
+                    chunk("a", 0, 20_000, ChunkStatus.COMPLETED, 1_000, 11_000),
                 chunk("b", 18_000, 38_000, ChunkStatus.COMPLETED, 12_000, 22_000),
                 chunk("c", 36_000, 56_000, ChunkStatus.PROCESSING, 23_000),
             ),
@@ -101,8 +102,9 @@ class TranscriptionTimingTest {
 
     @Test
     fun `completed transcription has zero remaining time`() {
-        val result = transcriptionTiming(
-            listOf(chunk("a", 0, 10_000, ChunkStatus.COMPLETED, 1_000, 6_000)),
+        val result =
+            transcriptionTiming(
+                listOf(chunk("a", 0, 10_000, ChunkStatus.COMPLETED, 1_000, 6_000)),
             nowEpochMs = 100_000,
         )
         assertEquals(0L, result.remainingMs)

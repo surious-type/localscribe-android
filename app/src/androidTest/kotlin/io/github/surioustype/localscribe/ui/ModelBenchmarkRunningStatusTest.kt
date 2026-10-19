@@ -33,9 +33,11 @@ class ModelBenchmarkRunningStatusTest {
                 }
             }
         }
-        rule.onNodeWithText("Распознавание тестовой речи", substring = true)
+        rule
+            .onNodeWithText("Распознавание тестовой речи", substring = true)
             .assertIsDisplayed()
-        rule.onNodeWithContentDescription("Отменить тест модели")
+        rule
+            .onNodeWithContentDescription("Отменить тест модели")
             .assertIsDisplayed()
             .performClick()
         assertEquals(1, cancelled)
