@@ -57,6 +57,26 @@ class ResponsiveCriticalControlsTest {
     }
 
     @Test
+    fun smallScreenLargeFontKeepsSettingsToggleReachable() {
+        var enabled = false
+        rule.setContent {
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides Density(1f, fontScale = 2f),
+            ) {
+                Box(Modifier.width(280.dp)) {
+                    PreferenceSwitch(
+                        "Проверять обновления автоматически",
+                        enabled,
+                        "Проверка GitHub Releases без отправки записей.",
+                    ) { enabled = it }
+                }
+            }
+        }
+        rule.onNodeWithText("Проверять обновления автоматически").assertIsDisplayed()
+        rule.onNodeWithText("Проверка GitHub Releases без отправки записей.").assertIsDisplayed()
+    }
+
+    @Test
     fun tabletWidthKeepsImportAndStartActionsReachable() {
         rule.setContent {
             Box(Modifier.width(900.dp)) {

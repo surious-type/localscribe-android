@@ -1872,18 +1872,24 @@ private fun Settings(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item {
-            PreferenceSwitch("Цвета системы", dynamic) {
-                dynamic = it
-                preferences.dynamicColors =
-                    it
-                setDynamicColors(it)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            item {
+                PreferenceSwitch(
+                    "Цвета системы",
+                    dynamic,
+                    description = "Использовать цвета обоев Android вместо стандартного оформления.",
+                ) {
+                    dynamic = it
+                    preferences.dynamicColors = it
+                    setDynamicColors(it)
+                }
             }
         }
         item {
-            Text("Тема")
-            Row(
+            Text("Тема", style = MaterialTheme.typography.labelMedium)
+            androidx.compose.foundation.layout.FlowRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
                 modifier = Modifier.fillMaxWidth(),
             ) {
                 AppearanceMode.entries.forEach { mode ->
@@ -1908,7 +1914,11 @@ private fun Settings(
             }
         }
         item {
-            PreferenceSwitch("Проверять обновления автоматически", automatic) {
+            PreferenceSwitch(
+                "Проверять обновления автоматически",
+                automatic,
+                description = "Проверка GitHub Releases; файлы записей не отправляются.",
+            ) {
                 automatic = it
                 preferences.automaticUpdates = it
             }
@@ -1917,10 +1927,17 @@ private fun Settings(
             Text(
                 "Версия " + BuildConfig.VERSION_NAME + " · " +
                     when (update.availability) {
-                        UpdateAvailability.FAILED -> "Ошибка проверки"
+                        UpdateAvailability.FAILED -> "Не удалось проверить"
                         UpdateAvailability.AVAILABLE -> "Есть обновление"
-                        UpdateAvailability.UP_TO_DATE -> "Последняя версия"
-                        else -> "Не проверено"
+                        UpdateAvailability.UP_TO_DATE -> "Новых версий нет"
+                        UpdateAvailability.CHECKING -> "Проверяем…"
+                        UpdateAvailability.DISABLED -> "Автопроверка выключена"
+                        else ->
+                            if (update.failure?.diagnostic == "release_not_published") {
+                                "Релизы пока не опубликованы"
+                            } else {
+                                "Не проверено"
+                            }
                     },
             )
         }
@@ -1931,10 +1948,13 @@ private fun Settings(
                 )
             }
         }
-        update.failure?.let {
+        if (update.failure != null &&
+            update.failure?.diagnostic != "release_not_published"
+        ) {
             item {
                 Text(
-                    "Не удалось получить сведения о релизе. Проверьте сеть или попробуйте позже.",
+                    "Не удалось проверить обновления. Проверьте соединение и повторите.",
+                    style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
             }
@@ -1947,11 +1967,19 @@ private fun Settings(
             }) { Text("Проверить сейчас") }
         }
         presentation.releaseNotes?.let { notes -> item { Text(notes) } }
-        if (presentation.canDownload) {
+        if (presentation.canDownload && !BuildConfig.DEBUG) {
             item {
                 Button(onClick = {
                     scope.launch { graph.updates.downloadAvailableUpdate() }
                 }) { Text("Скачать обновление") }
+            }
+        } else if (presentation.canDownload && BuildConfig.DEBUG) {
+            item {
+                Text(
+                    "В debug-сборке нельзя установить релиз с другой подписью. " +
+                        "Для обновления используйте новую debug APK.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
         }
         if (updateDownload.status.name != "IDLE") {
@@ -1993,18 +2021,31 @@ private fun Settings(
                     "Облачная транскрибация и аналитика не используются.",
             )
         }
-        item {
-            Text(
-                "Whisper.cpp распространяется с приложенной лицензией. " +
-                    "Сведения о тестовых аудиофайлах доступны в документации.",
-            )
-        }
+
     }
 }
 
 @Composable
-private fun PreferenceSwitch(label: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) =
-    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label)
+internal fun PreferenceSwitch(
+    label: String,
+    checked: Boolean,
+    description: String? = null,
+    onCheckedChange: (Boolean) -> Unit,
+) =
+    Row(
+        modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+            Text(label, style = MaterialTheme.typography.bodyMedium)
+            description?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
         Switch(checked = checked, onCheckedChange = onCheckedChange)
     }

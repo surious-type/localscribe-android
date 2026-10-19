@@ -44,6 +44,20 @@ class GithubAppUpdateManagerTest {
         }
 
     @Test
+    fun `missing published release is different from network error`() =
+        runTest {
+            val manager =
+                manager(store = MemoryUpdateCheckStore(null)) { _, _ ->
+                    ByteArrayNetworkResponse(404)
+                }
+
+            val result = manager.checkForUpdate(AppVersion("1.0.0"), force = true)
+
+            assertEquals(UpdateAvailability.UNKNOWN, result.availability)
+            assertEquals("release_not_published", result.failure?.diagnostic)
+        }
+
+    @Test
     fun `failed request remains failed rather than up to date`() =
         runTest {
             val store = MemoryUpdateCheckStore(null)

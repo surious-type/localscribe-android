@@ -115,6 +115,15 @@ class GithubAppUpdateManager(
                 )
             checkStore.save(result)
             result.also { state.value = it }
+        } catch (_: NoPublishedReleaseException) {
+            val result =
+                UpdateState(
+                    availability = UpdateAvailability.UNKNOWN,
+                    lastCheckedAtEpochMs = now,
+                    failure = DomainFailure(FailureCode.UNKNOWN, "release_not_published"),
+                )
+            checkStore.save(result)
+            result.also { state.value = it }
         } catch (exception: Exception) {
             val result =
                 UpdateState(
@@ -242,6 +251,9 @@ class GithubAppUpdateManager(
                     "X-GitHub-Api-Version" to "2022-11-28",
                 ),
             ).use {
+                if (url == RELEASE_API_URL && it.statusCode == 404) {
+                    throw NoPublishedReleaseException()
+                }
                 require(it.statusCode == 200) { "Update check failed with HTTP ${it.statusCode}" }
                 it.body.readBounded(maxBytes).decodeToString()
             }
@@ -303,3 +315,5 @@ class GithubAppUpdateManager(
         val JSON = Json { ignoreUnknownKeys = true }
     }
 }
+
+private class NoPublishedReleaseException : RuntimeException()
