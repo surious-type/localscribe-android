@@ -28,13 +28,14 @@ object ChunkWindowProfiles {
                     chunkDurationMs = seconds * 1_000L,
                     overlapMs = OVERLAP_MS,
                 )
-            val chunks = ChunkPlanner().plan(
-                "comparison",
-                "comparison",
-                sourceDurationMs,
-                config,
-                0L,
-            )
+            val chunks =
+                ChunkPlanner().plan(
+                    "comparison",
+                    "comparison",
+                    sourceDurationMs,
+                    config,
+                    0L,
+                )
             val processed = chunks.sumOf { it.endMs - it.startMs }
             ChunkWindowComparison(
                 windowSeconds = seconds,
