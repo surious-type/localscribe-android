@@ -36,19 +36,16 @@ class LiveTranscriptStore {
         if (end <= start) return
         state.update { current ->
             val existing = current[jobId].orEmpty()
-            current +
-                (
-                    jobId to (
-                        existing +
-                            TranscriptSegment(
-                                id = "preview-${chunk.id}:${existing.size}",
-                                chunkId = chunk.id,
-                                absoluteStartMs = chunk.startMs + start,
-                                absoluteEndMs = chunk.startMs + end,
-                                text = segment.text.trim(),
-                            )
-                    ).takeLast(MAX_PREVIEW_SEGMENTS)
+            val nextSegment =
+                TranscriptSegment(
+                    id = "preview-${chunk.id}:${existing.size}",
+                    chunkId = chunk.id,
+                    absoluteStartMs = chunk.startMs + start,
+                    absoluteEndMs = chunk.startMs + end,
+                    text = segment.text.trim(),
                 )
+            val nextPreview = (existing + nextSegment).takeLast(MAX_PREVIEW_SEGMENTS)
+            current + (jobId to nextPreview)
         }
     }
 
