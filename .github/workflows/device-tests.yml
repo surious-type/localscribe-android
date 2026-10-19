@@ -11,6 +11,11 @@ on:
 permissions:
   contents: read
 
+# Superseded commits must not keep expensive emulator instances running.
+concurrency:
+  group: device-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   device-tests:
     runs-on: ubuntu-24.04

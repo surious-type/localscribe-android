@@ -275,7 +275,9 @@ class TranscriptionCoordinator(
                                         control.request.get() != ControlRequest.NONE
                                     },
                                 ) { segment ->
-                                    liveTranscript.publish(jobId, chunk, segment)
+                                    if (segment.startMs < prepared.effectiveDurationMs) {
+                                        liveTranscript.publish(jobId, chunk, segment)
+                                    }
                                 }
                             }
                         val inferenceMs = (System.nanoTime() - inferenceStarted) / 1_000_000L
