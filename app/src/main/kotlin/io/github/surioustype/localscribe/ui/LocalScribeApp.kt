@@ -586,11 +586,13 @@ private fun SourceControls(
     close: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
-    val existingJobs by graph.transcriptionRepository.observeJobs()
+    val existingJobs by graph.transcriptionRepository
+        .observeJobs()
         .collectAsStateWithLifecycle(emptyList())
-    val latestCompletedJob = existingJobs.firstOrNull {
-        it.sourceId == sourceId && it.status == JobStatus.COMPLETED
-    }
+    val latestCompletedJob =
+        existingJobs.firstOrNull {
+            it.sourceId == sourceId && it.status == JobStatus.COMPLETED
+        }
     val transcriptionModels = installedModels.filter { it.descriptorId != "silero-v6.2.0" }
     val installedModelIds = transcriptionModels.map { it.descriptorId }.distinct()
     val vadModels = installedModels.filter { it.descriptorId == "silero-v6.2.0" }
