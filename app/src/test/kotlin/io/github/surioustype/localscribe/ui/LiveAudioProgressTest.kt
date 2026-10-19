@@ -11,7 +11,8 @@ class LiveAudioProgressTest {
         val preview = listOf(
             TranscriptSegment("preview", "chunk-2", 21_000L, 29_000L, "sample"),
         )
-        assertEquals(29_000L, displayedAudioProgressMs(committed, preview, 38_000L))
+        val visible = displayedAudioProgressMs(committed, preview, 38_000L)
+        assertEquals(29_000L, visible)
         assertEquals(20_000L, committed)
     }
 
@@ -20,15 +21,17 @@ class LiveAudioProgressTest {
         val preview = listOf(
             TranscriptSegment("preview", "chunk-2", 1_000L, 5_000L, "text"),
         )
-        assertEquals(20_000L, displayedAudioProgressMs(20_000L, preview, 38_000L))
-        assertEquals(38_000L, displayedAudioProgressMs(20_000L, preview.map {
-            it.copy(absoluteEndMs = 99_000L)
-        }, 38_000L))
+        val oversizedPreview = preview.map { it.copy(absoluteEndMs = 99_000L) }
+        val retained = displayedAudioProgressMs(20_000L, preview, 38_000L)
+        val clamped = displayedAudioProgressMs(20_000L, oversizedPreview, 38_000L)
+        assertEquals(20_000L, retained)
+        assertEquals(38_000L, clamped)
     }
 
     @Test
     fun `silence or no new segments keeps the durable progress`() {
-        assertEquals(0L, displayedAudioProgressMs(0L, emptyList(), 38_000L))
-        assertEquals(20_000L, displayedAudioProgressMs(20_000L, emptyList(), 38_000L))
+        val empty = emptyList<TranscriptSegment>()
+        assertEquals(0L, displayedAudioProgressMs(0L, empty, 38_000L))
+        assertEquals(20_000L, displayedAudioProgressMs(20_000L, empty, 38_000L))
     }
 }

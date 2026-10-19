@@ -927,10 +927,14 @@ private fun JobRow(
                     style = MaterialTheme.typography.bodySmall,
                 )
             }
+            val progressLabel =
+                if (visibleAudioMs > completedDuration) {
+                    "Распознано (предварительно): "
+                } else {
+                    "Обработано аудио: "
+                }
             Text(
-                (if (visibleAudioMs > completedDuration) "Распознано (предварительно): "
-                 else "Обработано аудио: ") +
-                    formatAudioDuration(visibleAudioMs) +
+                progressLabel + formatAudioDuration(visibleAudioMs) +
                     " / " + formatAudioDuration(totalDuration),
                 style = MaterialTheme.typography.bodySmall,
             )

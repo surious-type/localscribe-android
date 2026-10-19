@@ -38,20 +38,18 @@ fun transcriptionTiming(
 
     // Overlap must not count as additional audio when measuring throughput.
     var previousEnd = 0L
-    val measurements =
-        committed
-            .mapNotNull { chunk ->
-            val uniqueMs = (chunk.endMs - maxOf(previousEnd, chunk.startMs)).coerceAtLeast(0L)
-            previousEnd = maxOf(previousEnd, chunk.endMs)
-            val started = chunk.startedAtEpochMs
-            val ended = chunk.completedAtEpochMs
-            if (uniqueMs == 0L || started == null || ended == null || ended <= started) {
-                null
-            } else {
-                uniqueMs to (ended - started)
-            }
-            }
-            .takeLast(3)
+    val allMeasurements = committed.mapNotNull { chunk ->
+        val uniqueMs = (chunk.endMs - maxOf(previousEnd, chunk.startMs)).coerceAtLeast(0L)
+        previousEnd = maxOf(previousEnd, chunk.endMs)
+        val started = chunk.startedAtEpochMs
+        val ended = chunk.completedAtEpochMs
+        if (uniqueMs == 0L || started == null || ended == null || ended <= started) {
+            null
+        } else {
+            uniqueMs to (ended - started)
+        }
+    }
+    val measurements = allMeasurements.takeLast(3)
     if (measurements.isEmpty()) {
         return TranscriptionTiming(elapsed, null, completed, total)
     }
@@ -63,10 +61,9 @@ fun transcriptionTiming(
         (measuredCompute.toDouble() * (total - completed) / measuredAudio)
             .coerceIn(0.0, Long.MAX_VALUE.toDouble())
             .toLong()
-    val activeElapsed =
-        chunks
-            .filter { it.status == ChunkStatus.PROCESSING }
-            .sumOf { (nowEpochMs - (it.startedAtEpochMs ?: nowEpochMs)).coerceAtLeast(0L) }
+    val activeElapsed = chunks
+        .filter { it.status == ChunkStatus.PROCESSING }
+        .sumOf { (nowEpochMs - (it.startedAtEpochMs ?: nowEpochMs)).coerceAtLeast(0L) }
     // When a chunk runs slower than the samples, stop claiming a false '0 seconds left'.
     val remaining = if (activeElapsed > estimateMs) null else estimateMs - activeElapsed
     return TranscriptionTiming(elapsed, remaining, completed, total)
