@@ -50,6 +50,11 @@ class AndroidAudioRepository(
     private val mediaSources = MutableStateFlow<List<AudioSourceRecord>>(emptyList())
     private val privateImportDirectory = File(applicationContext.filesDir, PRIVATE_IMPORT_DIRECTORY)
     private val sourceOperationMutex = Mutex()
+    private val importDates =
+        applicationContext.getSharedPreferences("audio_import_dates", Context.MODE_PRIVATE)
+
+    @Volatile
+    private var mediaDates: Map<String, Long> = emptyMap()
 
     override fun observeSources(): Flow<List<AudioSourceRecord>> =
         combine(store.observe(), mediaSources) { imported, media ->
@@ -57,9 +62,8 @@ class AndroidAudioRepository(
                 .distinctBy { it.source.id }
                 .sortedWith(
                     compareByDescending<AudioSourceRecord> { record ->
-                        record.source.id
-                            .removePrefix("media:")
-                            .toLongOrNull() ?: Long.MIN_VALUE
+                        mediaDates[record.source.id]
+                            ?: importDates.getLong(record.source.id, 0L)
                     }.thenBy { it.source.displayName.lowercase() },
                 )
         }
@@ -176,6 +180,9 @@ class AndroidAudioRepository(
                         )
                     currentCoroutineContext().ensureActive()
                     withContext(NonCancellable) {
+                        importDates.edit()
+                            .putLong(record.source.id, System.currentTimeMillis())
+                            .apply()
                         store.upsert(record)
                         committed = true
                     }
@@ -332,6 +339,7 @@ class AndroidAudioRepository(
                 MediaStore.Audio.Media.DISPLAY_NAME,
                 MediaStore.Audio.Media.DURATION,
                 MediaStore.Audio.Media.MIME_TYPE,
+                MediaStore.Audio.Media.DATE_ADDED,
             )
         return try {
             resolver
@@ -352,9 +360,13 @@ class AndroidAudioRepository(
                             MediaStore.Audio.Media.DURATION,
                         )
                     val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
+                    val dateColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+                    val dates = mutableMapOf<String, Long>()
                     buildList {
                         while (cursor.moveToNext()) {
                             val id = cursor.getLong(idColumn)
+                            dates["$MEDIA_ID_PREFIX$id"] =
+                                cursor.getLong(dateColumn).coerceAtLeast(0L) * 1_000L
                             val uri = ContentUris.withAppendedId(collection, id)
                             add(
                                 AudioSourceRecord(
@@ -378,7 +390,7 @@ class AndroidAudioRepository(
                                 ),
                             )
                         }
-                    }
+                    }.also { mediaDates = dates }
                 } ?: emptyList()
         } catch (security: SecurityException) {
             emptyList()
