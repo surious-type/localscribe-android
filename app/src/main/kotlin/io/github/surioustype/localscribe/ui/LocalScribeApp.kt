@@ -625,6 +625,9 @@ private fun SourceControls(
                             },
                         vad = vad?.let { VadConfig(it.descriptorId, it.sha256) },
                     ),
+                    // Persisted in the job: resuming an old job keeps its original boundaries.
+                    chunkDurationMs = 20_000,
+                    overlapMs = 2_000,
                 )
             val job =
                 TranscriptionJob(
