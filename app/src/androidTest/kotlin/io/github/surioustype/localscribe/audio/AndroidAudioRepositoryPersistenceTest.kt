@@ -31,6 +31,7 @@ import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
+import java.util.UUID
 
 @RunWith(AndroidJUnit4::class)
 class AndroidAudioRepositoryPersistenceTest {
@@ -169,7 +170,9 @@ class AndroidAudioRepositoryPersistenceTest {
             context.contentResolver.insert(
                 MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL),
                 ContentValues().apply {
-                    put(MediaStore.Audio.Media.DISPLAY_NAME, displayName)
+                    // Use a unique MediaStore path for every fixture. API 35 can
+                    // reject duplicate _data names before the test reaches relink.
+                    put(MediaStore.Audio.Media.DISPLAY_NAME, "${UUID.randomUUID()}-$displayName")
                     put(MediaStore.Audio.Media.MIME_TYPE, "audio/wav")
                     put(MediaStore.Audio.Media.IS_MUSIC, 1)
                 },
