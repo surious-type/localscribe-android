@@ -12,6 +12,8 @@ class LocalScribeUiStateViewModel(
     private val state: SavedStateHandle,
 ) : ViewModel() {
     val benchmarkController = BenchmarkRunController(viewModelScope)
+    private val destinationHistory =
+        (state.get<ArrayList<String>>(DESTINATION_HISTORY) ?: arrayListOf()).toMutableList()
     private val mutable =
         MutableStateFlow(
             LocalScribeUiState(
@@ -34,7 +36,34 @@ class LocalScribeUiStateViewModel(
         )
     val uiState: StateFlow<LocalScribeUiState> = mutable.asStateFlow()
 
-    fun selectDestination(value: String) = update { it.copy(destination = value) }
+    fun selectDestination(value: String) {
+        val current = mutable.value.destination
+        if (value == current) return
+        destinationHistory.add(current)
+        state[DESTINATION_HISTORY] = ArrayList(destinationHistory)
+        update { it.copy(destination = value) }
+    }
+
+    /** Android Back returns through visited tabs, then the recordings root. */
+    fun navigateBack() {
+        val current = mutable.value
+        when {
+            current.transcriptJobId != null -> showTranscript(null)
+            current.selectedSourceId != null -> selectSource(null)
+            destinationHistory.isNotEmpty() -> {
+                val previous = destinationHistory.removeAt(destinationHistory.lastIndex)
+                state[DESTINATION_HISTORY] = ArrayList(destinationHistory)
+                update { it.copy(destination = previous) }
+            }
+            current.destination != "HOME" -> update { it.copy(destination = "HOME") }
+        }
+    }
+
+    fun canNavigateBack(): Boolean =
+        mutable.value.transcriptJobId != null ||
+            mutable.value.selectedSourceId != null ||
+            destinationHistory.isNotEmpty() ||
+            mutable.value.destination != "HOME"
 
     fun selectSource(value: String?) = update { it.copy(selectedSourceId = value) }
 
@@ -126,6 +155,7 @@ class LocalScribeUiStateViewModel(
 
     private companion object {
         const val DESTINATION = "destination"
+        const val DESTINATION_HISTORY = "destination_history"
         const val SELECTED_SOURCE = "selected_source"
         const val TRANSCRIPT_JOB = "transcript_job"
         const val TRANSCRIPT_QUERY = "transcript_query"
