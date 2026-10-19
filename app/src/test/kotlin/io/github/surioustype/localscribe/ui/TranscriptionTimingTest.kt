@@ -67,8 +67,8 @@ class TranscriptionTimingTest {
         val later = transcriptionTiming(chunks, nowEpochMs = 17_000)
         assertEquals(20_000L, earlier.completedAudioMs)
         assertEquals(38_000L, earlier.totalAudioMs)
-        assertEquals(7_000L, earlier.remainingMs)
-        assertEquals(3_000L, later.remainingMs)
+        assertEquals(8_000L, earlier.remainingMs)
+        assertEquals(4_000L, later.remainingMs)
         assertEquals(4_000L, earlier.remainingMs!! - later.remainingMs!!)
     }
 
@@ -96,7 +96,7 @@ class TranscriptionTimingTest {
         )
         assertEquals(38_000L, result.completedAudioMs)
         assertEquals(56_000L, result.totalAudioMs)
-        assertEquals(8_000L, result.remainingMs)
+        assertEquals(8_473L, result.remainingMs)
     }
 
     @Test

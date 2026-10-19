@@ -37,12 +37,16 @@ fun interface BenchmarkEngineFactory {
 
 enum class BenchmarkRunPhase { IDLE, RUNNING, COMPLETED, CANCELLED, FAILED }
 
+/** No invented percent: the native inference phase is indeterminate. */
+enum class BenchmarkStep { WAITING_FOR_ENGINE, PREPARING_AUDIO, LOADING_MODEL, RECOGNIZING, SAVING }
+
 data class BenchmarkRunState(
     val phase: BenchmarkRunPhase = BenchmarkRunPhase.IDLE,
     val completedModels: Int = 0,
     val totalModels: Int = 0,
     val modelId: String? = null,
     val failure: DomainFailure? = null,
+    val step: BenchmarkStep = BenchmarkStep.WAITING_FOR_ENGINE,
 )
 
 data class QualityDemoResult(
@@ -79,6 +83,13 @@ class AndroidBenchmarkManager(
     override fun observeBenchmarks(): Flow<List<BenchmarkRecord>> = benchmarkStore.observe()
 
     fun observeRunState(): Flow<BenchmarkRunState> = runState.asStateFlow()
+
+    private fun step(modelId: String, next: BenchmarkStep) {
+        val current = runState.value
+        if (current.phase == BenchmarkRunPhase.RUNNING && current.modelId == modelId) {
+            runState.value = current.copy(step = next)
+        }
+    }
 
     override suspend fun benchmark(
         model: InstalledModel,
@@ -160,6 +171,7 @@ class AndroidBenchmarkManager(
         hardwareProfile: HardwareProfile,
     ): CompletedBenchmark =
         executionMutex.withLock {
+            step(model.descriptorId, BenchmarkStep.PREPARING_AUDIO)
             require(config.threadCount > 0) { "threadCount must be positive" }
             val sample =
                 requireNotNull(
@@ -187,6 +199,7 @@ class AndroidBenchmarkManager(
                             ) { "Configured VAD hash changed" }
                         }
                     }
+                step(model.descriptorId, BenchmarkStep.LOADING_MODEL)
                 engine.loadModel(model, vad)
                 samples += sampler.snapshot()
                 lateinit var recognizedText: String
@@ -200,6 +213,7 @@ class AndroidBenchmarkManager(
                             }
                         }
                     try {
+                        step(model.descriptorId, BenchmarkStep.RECOGNIZING)
                         val start = clock.elapsedRealtimeMs()
                         val result =
                             engine.transcribe(
@@ -250,6 +264,7 @@ class AndroidBenchmarkManager(
             }
             kotlinx.coroutines.currentCoroutineContext().ensureActive()
             val result = checkNotNull(completed)
+            step(model.descriptorId, BenchmarkStep.SAVING)
             benchmarkStore.upsert(result.record)
             result
         }

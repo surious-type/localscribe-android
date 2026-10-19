@@ -41,7 +41,6 @@ import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
-import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -89,6 +88,7 @@ import io.github.surioustype.localscribe.BuildConfig
 import io.github.surioustype.localscribe.benchmark.AndroidHardwareProfile
 import io.github.surioustype.localscribe.benchmark.BenchmarkComparisons
 import io.github.surioustype.localscribe.benchmark.BenchmarkRunState
+import io.github.surioustype.localscribe.benchmark.BenchmarkStep
 import io.github.surioustype.localscribe.core.domain.ChunkPlanner
 import io.github.surioustype.localscribe.core.domain.TranscriptAssembler
 import io.github.surioustype.localscribe.core.model.AppVersion
@@ -107,6 +107,7 @@ import io.github.surioustype.localscribe.di.AppPreferences
 import io.github.surioustype.localscribe.service.TranscriptionService
 import io.github.surioustype.localscribe.ui.playback.AndroidMediaPlayerBackend
 import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackController
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -1408,20 +1409,14 @@ private fun Models(
         .collectAsStateWithLifecycle(BenchmarkRunState())
     val controller = uiModel.benchmarkController
     var actionModelId by remember { mutableStateOf<String?>(null) }
-    var qualityModelId by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
-    var testStartedAt by remember { mutableStateOf(0L) }
-    var testElapsed by remember { mutableStateOf(0L) }
-    LaunchedEffect(runState.phase, runState.modelId) {
-        if (runState.phase.name == "RUNNING") {
-            if (testStartedAt == 0L) testStartedAt = android.os.SystemClock.elapsedRealtime()
-            while (runState.phase.name == "RUNNING") {
-                testElapsed = android.os.SystemClock.elapsedRealtime() - testStartedAt
-                delay(1_000)
-            }
-        } else {
-            testStartedAt = 0L
+    var testElapsed by remember { mutableStateOf(controller.elapsedMs()) }
+    LaunchedEffect(controller.isBusy) {
+        while (controller.isBusy) {
+            testElapsed = controller.elapsedMs()
+            delay(500)
         }
+        testElapsed = controller.elapsedMs()
     }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -1442,8 +1437,7 @@ private fun Models(
                 benchmarks.firstOrNull {
                     it.modelId == model.id && it.modelHash.equals(saved?.sha256, true)
                 }
-            val testing =
-                runState.phase.name == "RUNNING" && runState.modelId == model.id
+            val testing = controller.isBusy && controller.activeModelId == model.id
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 shape = localScribeShape,
@@ -1506,18 +1500,17 @@ private fun Models(
                                 enabled = !controller.isBusy,
                                 onClick = {
                                     actionModelId = model.id
-                                    qualityModelId = model.id
                                     actionError = null
-                                    testStartedAt = android.os.SystemClock.elapsedRealtime()
-                                    controller.start {
-                                        runCatching {
-                                            graph.benchmark.runQualityDemo(
-                                                saved,
-                                                InferenceConfig(4, "en"),
-                                                "english_jfk_37s",
-                                                AndroidHardwareProfile.read(context),
-                                            )
-                                        }.onSuccess { quality ->
+                                    controller.start(model.id) {
+                                        try {
+                                            // One inference pass yields both speed and WER/CER.
+                                            val quality =
+                                                graph.benchmark.runQualityDemo(
+                                                    saved,
+                                                    InferenceConfig(4, "en"),
+                                                    "english_jfk_37s",
+                                                    AndroidHardwareProfile.read(context),
+                                                )
                                             uiModel.setQualityResult(
                                                 QualityResultPresentation(
                                                     quality.referenceText,
@@ -1537,35 +1530,19 @@ private fun Models(
                                                     (quality.score.characterErrorRate * 100)
                                                         .toInt() + "%",
                                             )
-                                        }.onFailure {
-                                            actionError = "Тест качества не завершён."
+                                            controller.rememberQualityResult(model.id)
+                                        } catch (cancelled: CancellationException) {
+                                            throw cancelled
+                                        } catch (_: Exception) {
+                                            actionError = "Не удалось завершить тест модели."
                                         }
                                     }
                                 },
                             ) {
-                                Icon(Icons.Default.Science, contentDescription = "Тест качества")
-                            }
-                            IconButton(
-                                enabled = !controller.isBusy,
-                                onClick = {
-                                    actionModelId = model.id
-                                    actionError = null
-                                    testStartedAt = android.os.SystemClock.elapsedRealtime()
-                                    controller.start {
-                                        runCatching {
-                                            graph.benchmark.benchmark(
-                                                saved,
-                                                InferenceConfig(4, "en"),
-                                                "english_jfk_37s",
-                                                AndroidHardwareProfile.read(context),
-                                            )
-                                        }.onFailure {
-                                            actionError = "Не удалось измерить скорость."
-                                        }
-                                    }
-                                },
-                            ) {
-                                Icon(Icons.Default.Speed, contentDescription = "Тест скорости")
+                                Icon(
+                                    Icons.Default.Science,
+                                    contentDescription = "Протестировать скорость и качество",
+                                )
                             }
                             IconButton(
                                 enabled = !controller.isBusy,
@@ -1614,9 +1591,18 @@ private fun Models(
                     if (testing) {
                         LocalScribeProgress(null)
                         Text(
-                            "Идёт тест · прошло " + formatAudioDuration(testElapsed) +
-                                ". Ожидаем результаты распознавания.",
+                            when (runState.step) {
+                                BenchmarkStep.WAITING_FOR_ENGINE -> "Ожидание свободного движка"
+                                BenchmarkStep.PREPARING_AUDIO -> "Подготовка тестового аудио"
+                                BenchmarkStep.LOADING_MODEL -> "Загрузка модели в память"
+                                BenchmarkStep.RECOGNIZING -> "Распознавание тестовой речи"
+                                BenchmarkStep.SAVING -> "Сохранение результатов теста"
+                            } + " · прошло " + formatAudioDuration(testElapsed),
+                            style = MaterialTheme.typography.bodySmall,
                         )
+                        OutlinedButton(onClick = controller::cancel) {
+                            Text("Отменить тест")
+                        }
                     }
                     if (result != null) {
                         Text(
@@ -1625,7 +1611,9 @@ private fun Models(
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
-                    if (qualityModelId == model.id && savedUi.qualityResult != null) {
+                    if (controller.lastQualityModelId == model.id &&
+                        savedUi.qualityResult != null
+                    ) {
                         Text(
                             "Тест английской речи: " + (savedUi.benchmarkStatus ?: "готово") +
                                 ". WER — доля ошибок в словах, CER — в символах; " +
