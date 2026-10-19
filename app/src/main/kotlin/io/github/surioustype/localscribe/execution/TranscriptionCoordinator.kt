@@ -80,6 +80,7 @@ class TranscriptionCoordinator(
     private val thermalState: ThermalState = ThermalState.None,
     private val transcriptContext: TranscriptContext = TranscriptContext(),
     private val executionMutex: Mutex,
+    private val liveTranscript: LiveTranscriptStore = LiveTranscriptStore(),
 ) {
     private val controlMutex = Mutex()
     private val activeExecutions = mutableListOf<ActiveExecution>()
@@ -239,13 +240,16 @@ class TranscriptionCoordinator(
                             job.config.inference.withThreads(
                                 thermal.threadCount(job.config.inference.threadCount),
                             )
+                        liveTranscript.clear(jobId)
                         val result =
-                            engine.transcribe(
+                            engine.transcribeStreaming(
                                 pcm,
                                 config,
                                 prompt,
                                 CancellationSignal { control.request.get() != ControlRequest.NONE },
-                            )
+                            ) { segment ->
+                                liveTranscript.publish(jobId, chunk, segment)
+                            }
                         outcomeFor(control.request.get())?.let { return@withLock it }
                         val segments =
                             result.segments.mapIndexed { index, segment ->
@@ -261,6 +265,7 @@ class TranscriptionCoordinator(
                                 )
                             }
                         repository.completeChunk(chunk.id, segments, clock.nowEpochMs())
+                        liveTranscript.clear(jobId)
                         claimed = null
                     }
                     repository.completeJob(jobId, clock.nowEpochMs())
@@ -289,6 +294,7 @@ class TranscriptionCoordinator(
                         }
                     }
                 } finally {
+                    liveTranscript.clear(jobId)
                     if (loaded) withContext(NonCancellable) { engine.unloadModel() }
                 }
             }
