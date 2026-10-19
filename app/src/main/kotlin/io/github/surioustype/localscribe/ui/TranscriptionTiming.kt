@@ -26,14 +26,14 @@ fun transcriptionTiming(
             ?.coerceIn(0L, total) ?: 0L
     val elapsed =
         chunks.sumOf { chunk ->
-        val start = chunk.startedAtEpochMs ?: return@sumOf 0L
-        when (chunk.status) {
-            ChunkStatus.COMPLETED ->
-                (chunk.completedAtEpochMs ?: start).minus(start).coerceAtLeast(0L)
-            ChunkStatus.PROCESSING -> (nowEpochMs - start).coerceAtLeast(0L)
-            else -> 0L
+            val start = chunk.startedAtEpochMs ?: return@sumOf 0L
+            when (chunk.status) {
+                ChunkStatus.COMPLETED ->
+                    (chunk.completedAtEpochMs ?: start).minus(start).coerceAtLeast(0L)
+                ChunkStatus.PROCESSING -> (nowEpochMs - start).coerceAtLeast(0L)
+                else -> 0L
+            }
         }
-    }
     val estimate =
         if (completed > 0L && completed < total && elapsed > 0L) {
             (elapsed.toDouble() * (total - completed) / completed)
