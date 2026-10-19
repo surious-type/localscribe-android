@@ -19,4 +19,14 @@ class AppPreferences(context: Context) {
     var appearanceMode: String
         get() = values.getString("appearance_mode", "SYSTEM") ?: "SYSTEM"
         set(value) = values.edit().putString("appearance_mode", value).apply()
+    var recordingsSort: String
+        get() = values.getString("recordings_sort", "new")?.takeIf {
+            it in setOf("new", "old", "az", "za", "long", "short")
+        } ?: "new"
+        set(value) = values.edit().putString("recordings_sort", value).apply()
+    var recordingsFilter: String
+        get() = values.getString("recordings_filter", "all")?.takeIf {
+            it in setOf("all", "ready", "new")
+        } ?: "all"
+        set(value) = values.edit().putString("recordings_filter", value).apply()
 }
