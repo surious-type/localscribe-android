@@ -12,6 +12,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.Alignment
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -31,6 +32,7 @@ import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
@@ -187,20 +189,20 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
         Scaffold(
             containerColor = MaterialTheme.colorScheme.background,
             topBar = {
-                TopAppBar(
-                    title = { Text(title, fontWeight = FontWeight.SemiBold) },
-                    navigationIcon = {
-                        if (detail) {
+                if (detail) {
+                    TopAppBar(
+                        title = { Text(title, fontWeight = FontWeight.SemiBold) },
+                        navigationIcon = {
                             IconButton(onClick = uiModel::navigateBack) {
                                 Icon(Icons.Default.ArrowBack, contentDescription = "Назад")
                             }
-                        }
-                    },
-                    colors =
-                        androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                            containerColor = MaterialTheme.colorScheme.background,
-                        ),
-                )
+                        },
+                        colors =
+                            androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                                containerColor = MaterialTheme.colorScheme.background,
+                            ),
+                    )
+                }
             },
             bottomBar = {
                 if (!detail) {
@@ -397,8 +399,6 @@ private fun Home(
             }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
-            Text("Ваши записи", style = MaterialTheme.typography.headlineMedium)
-            Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it },
@@ -537,13 +537,6 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
     // Completed work stays visible instead of disappearing from the active-only filter.
     val visible = jobs.filter { it.status != JobStatus.CANCELLED }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text("Транскрибации", style = MaterialTheme.typography.headlineMedium)
-            Text(
-                "Текущие и готовые записи",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
         if (visible.isEmpty()) {
             item {
                 Card(colors = localScribeCardColors(), shape = localScribeShape) {
@@ -1074,7 +1067,7 @@ private fun JobRow(
                         onClick = showTranscript,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Icon(Icons.Default.FileDownload, contentDescription = null)
+                        Icon(Icons.Default.Description, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
                         Text("Открыть текст")
                     }
@@ -1199,9 +1192,8 @@ private fun TranscriptScreen(
     ) {
         item {
             Text(
-                "Расшифровка записи",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.SemiBold,
+                "Текст и запись",
+                style = MaterialTheme.typography.titleMedium,
             )
         }
         item {
@@ -1384,6 +1376,7 @@ private fun TranscriptScreen(
         }
         item { Spacer(Modifier.height(16.dp)) }
     }
+    BackHandler(enabled = showExport) { showExport = false }
     if (showExport) {
         ModalBottomSheet(onDismissRequest = { showExport = false }) {
             Column(
@@ -1497,14 +1490,6 @@ private fun Models(
     }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        item {
-            Text("Локальные модели", style = MaterialTheme.typography.headlineMedium)
-            Text(
-                "Модель скачивается один раз. Нажмите на значок теста для проверки на вашем телефоне.",
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
         items(catalog.filter { it.kind == ModelKind.TRANSCRIPTION }, key = { it.id }) { model ->
             val saved = installed.firstOrNull { it.descriptorId == model.id }
             val download = downloads.firstOrNull { it.modelId == model.id }
@@ -1699,7 +1684,7 @@ private fun Models(
             }
         }
         item {
-            Text("Определение речи", style = MaterialTheme.typography.titleLarge)
+            Text("Определение речи", style = MaterialTheme.typography.titleMedium)
             Text(
                 "Silero VAD пропускает тишину и помогает избежать выдуманных фраз.",
                 style = MaterialTheme.typography.bodySmall,
@@ -1852,7 +1837,6 @@ private fun Settings(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-        item { Text("Внешний вид", style = MaterialTheme.typography.headlineMedium) }
         item {
             PreferenceSwitch("Цвета системы", dynamic) {
                 dynamic = it
@@ -1888,7 +1872,6 @@ private fun Settings(
                 }
             }
         }
-        item { Text("Обновления", style = MaterialTheme.typography.titleLarge) }
         item {
             PreferenceSwitch("Проверять обновления автоматически", automatic) {
                 automatic = it

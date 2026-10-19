@@ -55,7 +55,7 @@ class NotificationResumePermissionTest {
                 .commit()
         }
         rule.activityRule.scenario.recreate()
-        rule.onNodeWithText("Ваши записи").assertIsDisplayed()
+        rule.onNodeWithText("Поиск записей…").assertIsDisplayed()
     }
 
     @Test
@@ -77,7 +77,7 @@ class NotificationResumePermissionTest {
     }
 
     @Test
-    fun grantedResumeRunsWithoutInferenceAndRendersSanitizedFailure() {
+    fun grantedResumeSafelyPausesWhenAudioSourceIsMissing() {
         val jobId = createPausedJob()
         assertNotificationPermissionDenied()
 
@@ -86,9 +86,9 @@ class NotificationResumePermissionTest {
 
         rule.waitUntil(10_000) {
             jobStatus(jobId) == JobStatus.PAUSED &&
-                jobFailureCode(jobId) == FailureCode.MODEL_CORRUPTED
+                jobFailureCode(jobId) == FailureCode.SOURCE_MISSING
         }
-        rule.onNodeWithText("The selected model needs to be downloaded again.").assertIsDisplayed()
+        rule.onNodeWithText("The audio source is unavailable. Choose an accessible copy.").assertIsDisplayed()
         assertEquals(JobStatus.PAUSED, jobStatus(jobId))
     }
 

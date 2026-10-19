@@ -293,7 +293,10 @@ class TranscriptionCoordinator(
                                         segment.endMs > segment.startMs
                                 }.mapIndexed { index, segment ->
                                     val duration =
-                                        minOf(chunk.endMs - chunk.startMs, prepared.effectiveDurationMs)
+                                        minOf(
+                                            chunk.endMs - chunk.startMs,
+                                            prepared.effectiveDurationMs,
+                                        )
                                     TranscriptSegment(
                                         id = "${chunk.id}:$index",
                                         chunkId = chunk.id,
