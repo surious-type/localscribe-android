@@ -15,6 +15,7 @@ import io.github.surioustype.localscribe.data.RoomInstalledModelRepository
 import io.github.surioustype.localscribe.data.RoomTranscriptionRepository
 import io.github.surioustype.localscribe.engine.WhisperTranscriptionEngine
 import io.github.surioustype.localscribe.execution.AndroidThermalMonitor
+import io.github.surioustype.localscribe.execution.LiveTranscriptStore
 import io.github.surioustype.localscribe.execution.RecoveryInitializer
 import io.github.surioustype.localscribe.execution.TranscriptionCoordinator
 import io.github.surioustype.localscribe.models.InstalledModelFileStore
@@ -46,6 +47,7 @@ class AppGraph(context: Context) {
     val audioRepository = AndroidAudioRepository(appContext, sourceStore)
     private val audioPipeline = AndroidAudioPipeline(appContext)
     val thermalMonitor = AndroidThermalMonitor(appContext)
+    val liveTranscript = LiveTranscriptStore()
     val catalog =
         JsonModelCatalogRepository(
             bundledCatalog = {
@@ -76,6 +78,7 @@ class AppGraph(context: Context) {
             engine = WhisperTranscriptionEngine(),
             thermalState = thermalMonitor,
             executionMutex = executionMutex,
+            liveTranscript = liveTranscript,
         )
     val modelFiles =
         InstalledModelFileStore(
