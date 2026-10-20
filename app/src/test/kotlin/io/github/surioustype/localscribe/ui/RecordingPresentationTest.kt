@@ -52,7 +52,14 @@ class RecordingPresentationTest {
     @Test
     fun completedVersionsAreNewestFirstAndExcludeIncompleteReruns() {
         val initial = job("initial", "recording", JobStatus.COMPLETED, created = 10, completed = 50)
-        val improved = job("improved", "recording", JobStatus.COMPLETED, created = 20, completed = 90)
+        val improved =
+            job(
+                "improved",
+                "recording",
+                JobStatus.COMPLETED,
+                created = 20,
+                completed = 90,
+            )
         val running = job("running", "recording", JobStatus.RUNNING, created = 100)
         val cancelled = job("cancelled", "recording", JobStatus.CANCELLED, created = 120)
         val other = job("other", "another", JobStatus.COMPLETED, created = 150, completed = 200)
