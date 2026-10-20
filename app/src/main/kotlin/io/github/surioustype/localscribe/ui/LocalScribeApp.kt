@@ -1222,7 +1222,8 @@ private fun TranscriptScreen(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        if (versions.size > 1) {
+        // A running rerun still lets the user open an earlier completed transcript.
+        if (versions.size > 1 || (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)) {
             item {
                 Box {
                     OutlinedButton(onClick = { showVersions = true }) {
