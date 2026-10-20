@@ -88,6 +88,28 @@ class LocalScribeUiStateViewModel(
 
     fun selectSource(value: String?) = update { it.copy(selectedSourceId = value) }
 
+    /**
+     * Tapping a recording opens its existing transcript when one is available.
+     * Otherwise it opens the transcription setup. Never starts a job implicitly.
+     */
+    fun openRecording(sourceId: String, completedJobId: String?) =
+        update {
+            it.copy(
+                selectedSourceId = if (completedJobId == null) sourceId else null,
+                transcriptJobId = completedJobId,
+            )
+        }
+
+    /** Explicit secondary action. Previous completed jobs and transcripts remain intact. */
+    fun retranscribe(sourceId: String) =
+        update {
+            it.copy(
+                selectedSourceId = sourceId,
+                transcriptJobId = null,
+                sourceMessage = null,
+            )
+        }
+
     fun showTranscript(value: String?) = update { it.copy(transcriptJobId = value) }
 
     fun setTranscriptQuery(value: String) = update { it.copy(transcriptQuery = value) }
