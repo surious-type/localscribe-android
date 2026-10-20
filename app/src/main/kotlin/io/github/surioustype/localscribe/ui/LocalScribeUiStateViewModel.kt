@@ -15,6 +15,8 @@ class LocalScribeUiStateViewModel(
     private val state: SavedStateHandle,
 ) : ViewModel() {
     val benchmarkController = BenchmarkRunController(viewModelScope)
+    // Back from rerun setup returns to the already saved transcript.
+    private var returnTranscriptAfterRerun: String? = state[RETURN_TRANSCRIPT_AFTER_RERUN]
 
     // A tab change must not show the download action again before the repository
     // publishes its first durable download state.
@@ -70,6 +72,12 @@ class LocalScribeUiStateViewModel(
         val current = mutable.value
         when {
             current.transcriptJobId != null -> showTranscript(null)
+            current.selectedSourceId != null && returnTranscriptAfterRerun != null -> {
+                val previous = returnTranscriptAfterRerun
+                returnTranscriptAfterRerun = null
+                state[RETURN_TRANSCRIPT_AFTER_RERUN] = null
+                update { it.copy(selectedSourceId = null, transcriptJobId = previous) }
+            }
             current.selectedSourceId != null -> selectSource(null)
             destinationHistory.isNotEmpty() -> {
                 val previous = destinationHistory.removeAt(destinationHistory.lastIndex)
@@ -86,22 +94,33 @@ class LocalScribeUiStateViewModel(
             destinationHistory.isNotEmpty() ||
             mutable.value.destination != "HOME"
 
-    fun selectSource(value: String?) = update { it.copy(selectedSourceId = value) }
+    fun selectSource(value: String?) {
+        if (value == null) {
+            returnTranscriptAfterRerun = null
+            state[RETURN_TRANSCRIPT_AFTER_RERUN] = null
+        }
+        update { it.copy(selectedSourceId = value) }
+    }
 
     /**
      * Tapping a recording opens its existing transcript when one is available.
      * Otherwise it opens the transcription setup. Never starts a job implicitly.
      */
-    fun openRecording(sourceId: String, completedJobId: String?) =
+    fun openRecording(sourceId: String, completedJobId: String?) {
+        returnTranscriptAfterRerun = null
+        state[RETURN_TRANSCRIPT_AFTER_RERUN] = null
         update {
             it.copy(
                 selectedSourceId = if (completedJobId == null) sourceId else null,
                 transcriptJobId = completedJobId,
             )
         }
+    }
 
     /** Explicit secondary action. Previous completed jobs and transcripts remain intact. */
-    fun retranscribe(sourceId: String) =
+    fun retranscribe(sourceId: String) {
+        returnTranscriptAfterRerun = mutable.value.transcriptJobId
+        state[RETURN_TRANSCRIPT_AFTER_RERUN] = returnTranscriptAfterRerun
         update {
             it.copy(
                 selectedSourceId = sourceId,
@@ -109,6 +128,7 @@ class LocalScribeUiStateViewModel(
                 sourceMessage = null,
             )
         }
+    }
 
     fun showTranscript(value: String?) = update { it.copy(transcriptJobId = value) }
 
@@ -200,6 +220,7 @@ class LocalScribeUiStateViewModel(
         const val DESTINATION = "destination"
         const val DESTINATION_HISTORY = "destination_history"
         const val SELECTED_SOURCE = "selected_source"
+        const val RETURN_TRANSCRIPT_AFTER_RERUN = "return_transcript_after_rerun"
         const val TRANSCRIPT_JOB = "transcript_job"
         const val TRANSCRIPT_QUERY = "transcript_query"
         const val EXPORT_FORMAT = "export_format"
