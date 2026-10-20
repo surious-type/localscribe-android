@@ -38,6 +38,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Science
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
@@ -484,25 +485,28 @@ private fun Home(
             }
         }
         items(visible, key = { it.source.id }) { record ->
-            val ready =
-                jobs.any {
-                    it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
-                }
+            val completedJob = latestCompletedTranscriptionJob(jobs, record.source.id)
             Card(
-                Modifier.fillMaxWidth().clickable { uiModel.selectSource(record.source.id) },
+                Modifier.fillMaxWidth().clickable {
+                    uiModel.openRecording(record.source.id, completedJob?.id)
+                },
                 colors = localScribeCardColors(),
                 shape = localScribeShape,
             ) {
                 Row(
-                    Modifier.padding(16.dp),
+                    Modifier.fillMaxWidth().padding(16.dp),
                     horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(
                         Icons.Default.Mic,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.primary,
                     )
-                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(5.dp),
+                    ) {
                         Text(
                             record.source.displayName,
                             style = MaterialTheme.typography.titleMedium,
@@ -515,11 +519,19 @@ private fun Home(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             style = MaterialTheme.typography.bodySmall,
                         )
-                        if (ready) {
+                        if (completedJob != null) {
                             Text(
-                                "✓ Транскрипция готова",
+                                "✓ Открыть расшифровку",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.primary,
+                            )
+                        }
+                    }
+                    if (completedJob != null) {
+                        IconButton(onClick = { uiModel.retranscribe(record.source.id) }) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = "Распознать заново",
                             )
                         }
                     }
@@ -577,10 +589,7 @@ private fun SourceControls(
     val existingJobs by graph.transcriptionRepository
         .observeJobs()
         .collectAsStateWithLifecycle(emptyList())
-    val latestCompletedJob =
-        existingJobs.firstOrNull {
-            it.sourceId == sourceId && it.status == JobStatus.COMPLETED
-        }
+    val latestCompletedJob = latestCompletedTranscriptionJob(existingJobs, sourceId)
     val transcriptionModels = installedModels.filter { it.descriptorId != "silero-v6.2.0" }
     val installedModelIds = transcriptionModels.map { it.descriptorId }.distinct()
     val vadModels = installedModels.filter { it.descriptorId == "silero-v6.2.0" }
