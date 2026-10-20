@@ -78,6 +78,36 @@ class LocalScribeUiStateViewModelTest {
         assertFalse(recreated.canNavigateBack())
     }
 
+    @Test
+    fun openingCompletedRecordingGoesDirectlyToTranscriptAndBackToRecordings() {
+        val model = LocalScribeUiStateViewModel(SavedStateHandle())
+        model.openRecording("audio-1", "job-completed")
+
+        assertEquals("job-completed", model.uiState.value.transcriptJobId)
+        assertEquals(null, model.uiState.value.selectedSourceId)
+
+        model.navigateBack()
+        assertEquals(null, model.uiState.value.transcriptJobId)
+        assertEquals(null, model.uiState.value.selectedSourceId)
+        assertEquals("HOME", model.uiState.value.destination)
+    }
+
+    @Test
+    fun recordingWithoutTranscriptAndExplicitRerunOpenOnlySetup() {
+        val model = LocalScribeUiStateViewModel(SavedStateHandle())
+        model.openRecording("audio-1", null)
+        assertEquals("audio-1", model.uiState.value.selectedSourceId)
+        assertEquals(null, model.uiState.value.transcriptJobId)
+
+        model.openRecording("audio-1", "job-old")
+        model.retranscribe("audio-1")
+        assertEquals("audio-1", model.uiState.value.selectedSourceId)
+        assertEquals(null, model.uiState.value.transcriptJobId)
+
+        model.navigateBack()
+        assertEquals(null, model.uiState.value.selectedSourceId)
+    }
+
     @Test fun selectionsAndSearchRestoreFromSavedState() {
         val handle = SavedStateHandle()
         val first = LocalScribeUiStateViewModel(handle)
