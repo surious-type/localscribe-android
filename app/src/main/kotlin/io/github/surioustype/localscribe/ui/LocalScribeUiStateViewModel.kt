@@ -15,6 +15,7 @@ class LocalScribeUiStateViewModel(
     private val state: SavedStateHandle,
 ) : ViewModel() {
     val benchmarkController = BenchmarkRunController(viewModelScope)
+
     // Back from rerun setup returns to the already saved transcript.
     private var returnTranscriptAfterRerun: String? = state[RETURN_TRANSCRIPT_AFTER_RERUN]
 
