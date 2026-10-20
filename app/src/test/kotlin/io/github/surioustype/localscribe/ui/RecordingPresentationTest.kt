@@ -49,6 +49,36 @@ class RecordingPresentationTest {
         )
     }
 
+    @Test
+    fun completedVersionsAreNewestFirstAndExcludeIncompleteReruns() {
+        val initial = job("initial", "recording", JobStatus.COMPLETED, created = 10, completed = 50)
+        val improved = job("improved", "recording", JobStatus.COMPLETED, created = 20, completed = 90)
+        val running = job("running", "recording", JobStatus.RUNNING, created = 100)
+        val cancelled = job("cancelled", "recording", JobStatus.CANCELLED, created = 120)
+        val other = job("other", "another", JobStatus.COMPLETED, created = 150, completed = 200)
+        val attempts = listOf(running, initial, other, cancelled, improved)
+
+        assertEquals(
+            listOf("improved", "initial"),
+            completedTranscriptionVersions(attempts, "recording").map { it.id },
+        )
+        assertEquals("improved", latestCompletedTranscriptionJob(attempts, "recording")?.id)
+    }
+
+    @Test
+    fun earlierTranscriptSurvivesFailedOrPausedRerun() {
+        val previous =
+            job("previous", "recording", JobStatus.COMPLETED, created = 3, completed = 25)
+        for (status in listOf(JobStatus.FAILED, JobStatus.PAUSED, JobStatus.CANCELLED)) {
+            val attempted = job("again", "recording", status, created = 40)
+            assertEquals(
+                listOf("previous"),
+                completedTranscriptionVersions(listOf(attempted, previous), "recording")
+                    .map { it.id },
+            )
+        }
+    }
+
     private fun job(
         id: String,
         sourceId: String,
