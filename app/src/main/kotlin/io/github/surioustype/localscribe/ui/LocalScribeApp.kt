@@ -67,6 +67,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -242,18 +243,24 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
                 when {
-                    savedUi.transcriptJobId != null ->
-                        TranscriptScreen(
-                            requireNotNull(savedUi.transcriptJobId),
-                            graph,
-                            savedUi.transcriptQuery,
-                            savedUi.exportFormat,
-                            uiModel::setTranscriptQuery,
-                            uiModel::setExportFormat,
-                            uiModel::completeTranscriptExport,
-                            uiModel::setStatusMessage,
-                            close = { uiModel.showTranscript(null) },
-                        )
+                    savedUi.transcriptJobId != null -> {
+                        val selectedJobId = requireNotNull(savedUi.transcriptJobId)
+                        key(selectedJobId) {
+                            TranscriptScreen(
+                                selectedJobId,
+                                graph,
+                                savedUi.transcriptQuery,
+                                savedUi.exportFormat,
+                                uiModel::setTranscriptQuery,
+                                uiModel::setExportFormat,
+                                uiModel::completeTranscriptExport,
+                                uiModel::setStatusMessage,
+                                onChooseVersion = uiModel::showTranscript,
+                                onRetranscribe = uiModel::retranscribe,
+                                close = { uiModel.showTranscript(null) },
+                            )
+                        }
+                    }
                     savedUi.selectedSourceId != null -> {
                         val installed by graph.installedModels
                             .observeInstalledModels()
@@ -1118,6 +1125,8 @@ private fun TranscriptScreen(
     setExportFormat: (String?) -> Unit,
     completeExport: (Boolean) -> Unit,
     setStatus: (String?) -> Unit,
+    onChooseVersion: (String) -> Unit,
+    onRetranscribe: (String) -> Unit,
     close: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -1125,6 +1134,11 @@ private fun TranscriptScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     val job by graph.transcriptionRepository.observeJob(jobId).collectAsStateWithLifecycle(null)
+    val allJobs by graph.transcriptionRepository
+        .observeJobs()
+        .collectAsStateWithLifecycle(emptyList())
+    val versions = completedTranscriptionVersions(allJobs, job?.sourceId.orEmpty())
+    var showVersions by remember { mutableStateOf(false) }
     var sourceUri by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(job?.sourceId) {
         sourceUri =
@@ -1208,11 +1222,41 @@ private fun TranscriptScreen(
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        item {
-            Text(
-                "Текст и запись",
-                style = MaterialTheme.typography.titleMedium,
-            )
+        if (versions.size > 1) {
+            item {
+                Box {
+                    OutlinedButton(onClick = { showVersions = true }) {
+                        Text(
+                            "Версия: " + (job?.config?.modelId ?: "") + " · " +
+                                formatLocalDate(
+                                    job?.completedAtEpochMs ?: job?.updatedAtEpochMs ?: 0L,
+                                ),
+                        )
+                    }
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = showVersions,
+                        onDismissRequest = { showVersions = false },
+                    ) {
+                        versions.forEach { version ->
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = {
+                                    Text(
+                                        version.config.modelId + " · " +
+                                            formatLocalDate(
+                                                version.completedAtEpochMs
+                                                    ?: version.updatedAtEpochMs,
+                                            ),
+                                    )
+                                },
+                                onClick = {
+                                    showVersions = false
+                                    onChooseVersion(version.id)
+                                },
+                            )
+                        }
+                    }
+                }
+            }
         }
         item {
             Card(shape = localScribeShape, colors = localScribeCardColors()) {
@@ -1321,6 +1365,18 @@ private fun TranscriptScreen(
                     onClick = { showExport = true },
                 ) {
                     Icon(Icons.Default.FileDownload, contentDescription = "Экспортировать текст")
+                }
+            }
+        }
+        if (job?.status == JobStatus.COMPLETED) {
+            item {
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = { job?.sourceId?.let(onRetranscribe) },
+                ) {
+                    Icon(Icons.Default.Refresh, contentDescription = null)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Распознать заново")
                 }
             }
         }
