@@ -84,6 +84,49 @@ class RoomTranscriptionRepositoryTest {
         }
 
     @Test
+    fun cancellingRerunDoesNotOverwritePreviousCompletedTranscript() =
+        runTest {
+            repository.createJob(job(), listOf(chunk("original-chunk", 0)))
+            repository.resumeJob(JOB_ID, 2)
+            repository.claimNextChunk(JOB_ID, 3)
+            repository.completeChunk(
+                "original-chunk",
+                listOf(
+                    TranscriptSegment(
+                        "original-segment",
+                        "original-chunk",
+                        0,
+                        500,
+                        "Original transcript",
+                    ),
+                ),
+                4,
+            )
+            repository.completeJob(JOB_ID, 5)
+
+            val rerunId = "rerun"
+            repository.createJob(
+                job().copy(
+                    id = rerunId,
+                    createdAtEpochMs = 6,
+                    updatedAtEpochMs = 6,
+                ),
+                listOf(chunk("rerun-chunk", 0).copy(jobId = rerunId)),
+            )
+            repository.resumeJob(rerunId, 7)
+            repository.claimNextChunk(rerunId, 8)
+            repository.cancelJob(rerunId, 9)
+
+            assertEquals(JobStatus.COMPLETED, repository.getJob(JOB_ID)?.status)
+            assertEquals(
+                listOf("Original transcript"),
+                repository.observeSegments(JOB_ID).first().map { it.text },
+            )
+            assertEquals(JobStatus.CANCELLED, repository.getJob(rerunId)?.status)
+            assertEquals(emptyList<TranscriptSegment>(), repository.observeSegments(rerunId).first())
+        }
+
+    @Test
     fun cancellationWinsAgainstLateChunkCompletion() =
         runTest {
             repository.createJob(job(), listOf(chunk("chunk-1", 0)))
