@@ -123,7 +123,10 @@ class RoomTranscriptionRepositoryTest {
                 repository.observeSegments(JOB_ID).first().map { it.text },
             )
             assertEquals(JobStatus.CANCELLED, repository.getJob(rerunId)?.status)
-            assertEquals(emptyList<TranscriptSegment>(), repository.observeSegments(rerunId).first())
+            assertEquals(
+                emptyList<TranscriptSegment>(),
+                repository.observeSegments(rerunId).first(),
+            )
         }
 
     @Test
