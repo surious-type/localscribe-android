@@ -19,6 +19,30 @@ class LocalScribeUiStateViewModelTest {
         assertTrue(LocalScribeUiStateViewModel(state).consumeInboundAudio("content://shared/next"))
     }
 
+    @Test
+    fun processingOverlayAndSearchTargetSurviveRecreation() {
+        val handle = SavedStateHandle()
+        val first = LocalScribeUiStateViewModel(handle)
+        first.selectDestination("MODELS")
+        first.setLibraryQuery("Ньютон")
+        first.showProcessing(true)
+        first.openTranscriptAt("job-1", 42_000L, "Ньютон")
+
+        val restored = LocalScribeUiStateViewModel(handle).uiState.value
+        assertTrue(restored.processingVisible)
+        assertEquals("MODELS", restored.destination)
+        assertEquals("Ньютон", restored.libraryQuery)
+        assertEquals("job-1", restored.transcriptJobId)
+        assertEquals(42_000L, restored.transcriptSeekToMs)
+        assertEquals("Ньютон", restored.transcriptQuery)
+
+        LocalScribeUiStateViewModel(handle).showTranscript(null)
+        val back = LocalScribeUiStateViewModel(handle).uiState.value
+        assertTrue(back.processingVisible)
+        assertEquals(null, back.transcriptJobId)
+        assertEquals(null, back.transcriptSeekToMs)
+    }
+
     @Test fun selectionsAndSearchRestoreFromSavedState() {
         val handle = SavedStateHandle()
         val first = LocalScribeUiStateViewModel(handle)
