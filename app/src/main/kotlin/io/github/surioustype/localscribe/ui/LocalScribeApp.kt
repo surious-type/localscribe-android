@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -37,6 +38,7 @@ import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.Checkbox
@@ -55,6 +57,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -92,6 +95,7 @@ import io.github.surioustype.localscribe.core.model.ExportFormat
 import io.github.surioustype.localscribe.core.model.InferenceConfig
 import io.github.surioustype.localscribe.core.model.InstalledModel
 import io.github.surioustype.localscribe.core.model.JobStatus
+import io.github.surioustype.localscribe.core.model.AudioSourceRecord
 import io.github.surioustype.localscribe.core.model.ModelKind
 import io.github.surioustype.localscribe.core.model.TranscriptionConfig
 import io.github.surioustype.localscribe.core.model.TranscriptionJob
@@ -106,7 +110,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.util.UUID
 
-private enum class Destination { HOME, PROCESSING, MODELS, SETTINGS }
+private enum class Destination { HOME, MODELS, SETTINGS }
 
 @Composable
 fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
@@ -163,11 +167,18 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
             runCatching {
                 Destination.valueOf(savedUi.destination)
             }.getOrDefault(Destination.HOME)
-        val detail = savedUi.transcriptJobId != null || savedUi.selectedSourceId != null
+        val processing = savedUi.processingVisible
+        val detail = savedUi.transcriptJobId != null || savedUi.selectedSourceId != null || processing
+        val backgroundJobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
+        val activeJob = backgroundJobs.firstOrNull { it.status == JobStatus.RUNNING }
+            ?: backgroundJobs.firstOrNull {
+                it.status == JobStatus.PENDING || it.status == JobStatus.PAUSED
+            }
         val title =
             when {
                 savedUi.transcriptJobId != null -> "Транскрипция"
                 savedUi.selectedSourceId != null -> "Настройка транскрибации"
+                processing -> "Очередь обработки"
                 destination == Destination.HOME -> "LocalScribe"
                 destination == Destination.PROCESSING -> "Обработка"
                 destination == Destination.MODELS -> "Модели"
@@ -183,8 +194,10 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                             IconButton(onClick = {
                                 if (savedUi.transcriptJobId != null) {
                                     uiModel.showTranscript(null)
-                                } else {
+                                } else if (savedUi.selectedSourceId != null) {
                                     uiModel.selectSource(null)
+                                } else {
+                                    uiModel.showProcessing(false)
                                 }
                             }) { Icon(Icons.Default.ArrowBack, contentDescription = "Назад") }
                         }
@@ -197,19 +210,44 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
             },
             bottomBar = {
                 if (!detail) {
+                    Column {
+                        if (activeJob != null) {
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 4.dp)
+                                    .clickable { uiModel.showProcessing(true) }
+                                    .semantics { contentDescription = "Открыть очередь обработки" },
+                                colors = localScribeCardColors(),
+                                shape = localScribeShape,
+                            ) {
+                                Column(
+                                    Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                                ) {
+                                    Text("Обработка · " + localizedJobStatus(activeJob.status.name))
+                                    Text(
+                                        "Модель: " + activeJob.config.modelId,
+                                        style = MaterialTheme.typography.bodySmall,
+                                    )
+                                    Text(
+                                        "Нажмите, чтобы открыть очередь",
+                                        style = MaterialTheme.typography.labelSmall,
+                                    )
+                                }
+                            }
+                        }
                     NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
                         Destination.entries.forEach { item ->
                             val icon =
                                 when (item) {
                                     Destination.HOME -> Icons.Default.Home
-                                    Destination.PROCESSING -> Icons.Default.Mic
                                     Destination.MODELS -> Icons.Default.Folder
                                     Destination.SETTINGS -> Icons.Default.Settings
                                 }
                             val label =
                                 when (item) {
                                     Destination.HOME -> "Записи"
-                                    Destination.PROCESSING -> "Обработка"
                                     Destination.MODELS -> "Модели"
                                     Destination.SETTINGS -> "Настройки"
                                 }
@@ -220,6 +258,7 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                                 label = { Text(label) },
                             )
                         }
+                    }
                     }
                 }
             },
@@ -237,6 +276,7 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                             savedUi.transcriptJobId,
                             graph,
                             savedUi.transcriptQuery,
+                            savedUi.transcriptSeekToMs,
                             savedUi.exportFormat,
                             uiModel::setTranscriptQuery,
                             uiModel::setExportFormat,
@@ -262,8 +302,8 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                             }
                         }
                     }
+                    processing -> Processing(graph, uiModel)
                     destination == Destination.HOME -> Home(graph, receivedUri, uiModel, savedUi)
-                    destination == Destination.PROCESSING -> Processing(graph, uiModel)
                     destination == Destination.MODELS -> Models(graph, uiModel, savedUi)
                     else ->
                         Settings(graph, preferences, { appearanceMode = it }, {
@@ -652,7 +692,7 @@ private fun SourceControls(
             ) {
                 TranscriptionStartResult.STARTED -> {
                     close()
-                    uiModel.selectDestination(Destination.PROCESSING.name)
+                    uiModel.showProcessing(true)
                 }
                 TranscriptionStartResult.SERVICE_START_FAILED ->
                     uiModel.setSourceSetup(
@@ -1005,6 +1045,7 @@ private fun TranscriptScreen(
     jobId: String,
     graph: AppGraph,
     query: String,
+    seekToMs: Long?,
     pendingExportFormat: String?,
     setQuery: (String) -> Unit,
     setExportFormat: (String?) -> Unit,
@@ -1086,11 +1127,21 @@ private fun TranscriptScreen(
     }
     val filtered =
         remember(segments, query) { segments.filter { it.text.contains(query, ignoreCase = true) } }
+    val transcriptListState = rememberLazyListState()
+    LaunchedEffect(seekToMs, filtered) {
+        if (seekToMs != null && filtered.isNotEmpty()) {
+            val nearest = filtered.indices.minByOrNull {
+                kotlin.math.abs(filtered[it].absoluteStartMs - seekToMs)
+            } ?: 0
+            transcriptListState.scrollToItem(nearest + 3)
+        }
+    }
     var showExport by remember { mutableStateOf(false) }
-    LaunchedEffect(sourceUri) {
-        sourceUri?.let { player.seekTo(it, 0L) }
+    LaunchedEffect(sourceUri, seekToMs) {
+        sourceUri?.let { player.seekTo(it, seekToMs ?: 0L) }
     }
     LazyColumn(
+        state = transcriptListState,
         modifier = Modifier.fillMaxSize(),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
