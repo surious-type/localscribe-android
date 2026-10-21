@@ -52,6 +52,38 @@ class TranscriptCorrectionStoreTest {
             )
         }
 
+
+    @Test
+    fun undoRestoresPreviousCorrectionAfterEditingOrRestoringOriginal() =
+        runBlocking {
+            val context = InstrumentationRegistry.getInstrumentation().targetContext
+            val jobId = "edit-undo-test-" + UUID.randomUUID()
+            val original = TranscriptSegment("segment", "chunk", 100, 200, "Whisper original")
+            val store = TranscriptCorrectionStore(context)
+
+            store.save(jobId, original, "First correction")
+            store.save(jobId, original, "Second correction")
+            store.save(jobId, original, "First correction")
+            assertEquals(
+                "First correction",
+                applyTranscriptCorrections(
+                    listOf(original),
+                    store.observe(jobId).value,
+                ).single().text,
+            )
+
+            store.restore(jobId, original.id)
+            assertEquals("Whisper original", original.text)
+            store.save(jobId, original, "First correction")
+            assertEquals(
+                "First correction",
+                applyTranscriptCorrections(
+                    listOf(original),
+                    TranscriptCorrectionStore(context).observe(jobId).value,
+                ).single().text,
+            )
+        }
+
     @Test
     fun savingTheOriginalTextRemovesOnlyThatCorrection() =
         runBlocking {
