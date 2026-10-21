@@ -1465,6 +1465,18 @@ private fun TranscriptScreen(
             visibleSegments.filter { it.text.contains(query, ignoreCase = true) }
         }
     val transcriptListState = rememberLazyListState()
+    LaunchedEffect(activeSegmentId, followPlayback, query, visibleSegments) {
+        if (followPlayback && query.isBlank() && activeSegmentId != null) {
+            val index = visibleSegments.indexOfFirst { it.id == activeSegmentId }
+            if (index >= 0) {
+                val header = 4 +
+                    (if (versions.size > 1 || (versions.isNotEmpty() &&
+                        job?.status != JobStatus.COMPLETED)) 1 else 0) +
+                    (if (job?.status == JobStatus.COMPLETED) 1 else 0)
+                transcriptListState.animateScrollToItem(index + header)
+            }
+        }
+    }
     LaunchedEffect(seekToMs, filtered, versions.size, job?.status) {
         if (seekToMs != null && filtered.isNotEmpty()) {
             val nearest =
@@ -1487,9 +1499,10 @@ private fun TranscriptScreen(
     LaunchedEffect(sourceUri, seekToMs) {
         if (seekToMs != null) sourceUri?.let { player.seekTo(it, seekToMs) }
     }
+    Column(Modifier.fillMaxSize()) {
     LazyColumn(
         state = transcriptListState,
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.weight(1f),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         // A running rerun still lets the user open an earlier completed transcript.
@@ -1683,7 +1696,11 @@ private fun TranscriptScreen(
         }
         items(filtered, key = { it.id }) { segment ->
             Card(
-                colors = localScribeCardColors(),
+                colors = if (segment.id == activeSegmentId && playback.isPlaying) {
+                    androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    )
+                } else localScribeCardColors(),
                 shape = RoundedCornerShape(14.dp),
                 modifier =
                     Modifier.fillMaxWidth().clickable {
@@ -1709,6 +1726,25 @@ private fun TranscriptScreen(
                         style = MaterialTheme.typography.labelMedium,
                     )
                     Text(segment.text, style = MaterialTheme.typography.bodyLarge)
+                    if (!segment.id.startsWith("preview-")) {
+                        Row {
+                            TextButton(onClick = {
+                                editingSegment = segment
+                                editingText = segment.text
+                            }) {
+                                Icon(Icons.Default.Edit, contentDescription = null)
+                                Text("Изменить")
+                            }
+                            if (corrections.containsKey(segment.id)) {
+                                TextButton(onClick = {
+                                    val original = segments.firstOrNull { it.id == segment.id }?.text
+                                        ?: segment.text
+                                    undoEdit = segment.id to segment.text
+                                    correctionStore.save(jobId, segment.id, original, original)
+                                }) { Text("Оригинал") }
+                            }
+                        }
+                    }
                     if (segment.id.startsWith("preview-")) {
                         Text(
                             "Распознаётся · предварительный текст",
@@ -1720,6 +1756,96 @@ private fun TranscriptScreen(
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
+    }
+    Card(shape = localScribeShape, colors = localScribeCardColors()) {
+        Column(Modifier.fillMaxWidth().padding(8.dp)) {
+            Slider(
+                value = playback.positionMs.coerceIn(0L, playback.durationMs.coerceAtLeast(1L)).toFloat(),
+                onValueChange = { value -> sourceUri?.let { player.seekTo(it, value.toLong()) } },
+                valueRange = 0f..playback.durationMs.coerceAtLeast(1L).toFloat(),
+                modifier = Modifier.fillMaxWidth().semantics { contentDescription = "Позиция аудио" },
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = { player.skipBy(-10_000L) }) {
+                    Icon(Icons.Default.Replay10, contentDescription = "Назад на 10 секунд")
+                }
+                IconButton(onClick = {
+                    sourceUri?.let { if (playback.isPlaying) player.pause() else player.play(it) }
+                }) {
+                    Icon(if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
+                        contentDescription = if (playback.isPlaying) "Пауза" else "Воспроизвести")
+                }
+                IconButton(onClick = { player.skipBy(10_000L) }) {
+                    Icon(Icons.Default.Forward10, contentDescription = "Вперёд на 10 секунд")
+                }
+                Text(formatAudioDuration(playback.positionMs),
+                    style = MaterialTheme.typography.labelSmall)
+                Spacer(Modifier.weight(1f))
+                var speedMenu by remember { mutableStateOf(false) }
+                Box {
+                    TextButton(onClick = { speedMenu = true }) { Text("${playback.speed}×") }
+                    androidx.compose.material3.DropdownMenu(
+                        expanded = speedMenu, onDismissRequest = { speedMenu = false },
+                    ) {
+                        listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { speed ->
+                            androidx.compose.material3.DropdownMenuItem(
+                                text = { Text("${speed}×") },
+                                onClick = { player.setSpeed(speed); speedMenu = false },
+                            )
+                        }
+                    }
+                }
+                TextButton(onClick = { followPlayback = !followPlayback }) {
+                    Text(if (followPlayback) "Следить" else "К аудио")
+                }
+            }
+        }
+    }
+    }
+    editingSegment?.let { segment ->
+        AlertDialog(
+            onDismissRequest = { editingSegment = null },
+            title = { Text("Исправить текст") },
+            text = {
+                Column {
+                    Text("Исходное распознавание сохраняется отдельно.",
+                        style = MaterialTheme.typography.bodySmall)
+                    OutlinedTextField(
+                        value = editingText,
+                        onValueChange = { editingText = it },
+                        label = { Text("Текст сегмента") },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 3,
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    val original = segments.firstOrNull { it.id == segment.id }?.text ?: segment.text
+                    runCatching {
+                        correctionStore.save(jobId, segment.id, original, editingText)
+                    }.onSuccess {
+                        undoEdit = segment.id to segment.text
+                        editingSegment = null
+                    }.onFailure { setStatus("Не удалось сохранить исправление") }
+                }) { Text("Сохранить") }
+            },
+            dismissButton = { TextButton(onClick = { editingSegment = null }) { Text("Отмена") } },
+        )
+    }
+    undoEdit?.let { (segmentId, previous) ->
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("Изменение текста", style = MaterialTheme.typography.bodySmall)
+            TextButton(onClick = {
+                val original = segments.firstOrNull { it.id == segmentId }?.text ?: previous
+                runCatching { correctionStore.save(jobId, segmentId, original, previous) }
+                    .onFailure { setStatus("Не удалось отменить изменение") }
+                undoEdit = null
+            }) {
+                Icon(Icons.Default.Undo, contentDescription = null)
+                Text("Отменить")
+            }
+        }
     }
     BackHandler(enabled = showExport) { showExport = false }
     if (showExport) {
