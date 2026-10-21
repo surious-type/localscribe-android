@@ -169,7 +169,7 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                 savedUi.transcriptJobId != null -> "Транскрипция"
                 savedUi.selectedSourceId != null -> "Настройка транскрибации"
                 destination == Destination.HOME -> "LocalScribe"
-                destination == Destination.PROCESSING -> "Обработка"
+                destination == Destination.PROCESSING -> "Очередь обработки"
                 destination == Destination.MODELS -> "Модели"
                 else -> "Настройки"
             }
@@ -198,7 +198,7 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
             bottomBar = {
                 if (!detail) {
                     NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
-                        Destination.entries.forEach { item ->
+                        Destination.entries.filter { it != Destination.PROCESSING }.forEach { item ->
                             val icon =
                                 when (item) {
                                     Destination.HOME -> Icons.Default.Home
