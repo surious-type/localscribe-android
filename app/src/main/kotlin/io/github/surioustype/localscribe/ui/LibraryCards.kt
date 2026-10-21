@@ -129,9 +129,10 @@ internal fun LibraryRecordingCard(
                         style = MaterialTheme.typography.labelMedium,
                     )
                 }
-                if (record.recordedAtEpochMs != null && record.addedAtEpochMs != null) {
+                val addedAt = record.addedAtEpochMs
+                if (record.recordedAtEpochMs != null && addedAt != null) {
                     Text(
-                        "Добавлено: " + formatLocalDate(record.addedAtEpochMs),
+                        "Добавлено: " + formatLocalDate(addedAt),
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.labelSmall,
                     )
