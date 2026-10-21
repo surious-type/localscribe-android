@@ -21,4 +21,10 @@ data class AudioSourceRecord(
     val hasPersistedPermission: Boolean,
     /** SHA-256 of the selected audio bytes, used to verify a relinked source. */
     val contentFingerprint: String? = null,
+    /** Original recording date only when supplied by media metadata. */
+    val recordedAtEpochMs: Long? = null,
+    /** When imported or added to the device media library. */
+    val addedAtEpochMs: Long? = null,
+    /** Local alias; never renames or modifies the original audio file. */
+    val customTitle: String? = null,
 )

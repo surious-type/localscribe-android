@@ -26,6 +26,9 @@ internal fun AudioSourceRecord.toEntity() =
         accessStatus = accessStatus.name,
         hasPersistedPermission = hasPersistedPermission,
         contentFingerprint = contentFingerprint,
+        recordedAtEpochMs = recordedAtEpochMs,
+        addedAtEpochMs = addedAtEpochMs,
+        customTitle = customTitle,
     )
 
 internal fun AudioSourceEntity.toModel() =
@@ -34,6 +37,9 @@ internal fun AudioSourceEntity.toModel() =
         accessStatus = SourceAccessStatus.valueOf(accessStatus),
         hasPersistedPermission = hasPersistedPermission,
         contentFingerprint = contentFingerprint,
+        recordedAtEpochMs = recordedAtEpochMs,
+        addedAtEpochMs = addedAtEpochMs,
+        customTitle = customTitle,
     )
 
 internal fun TranscriptionJob.toEntity(): TranscriptionJobEntity {

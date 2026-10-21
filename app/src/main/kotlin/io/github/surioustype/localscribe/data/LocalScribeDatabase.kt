@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         InstalledModelEntity::class,
         BenchmarkEntity::class,
     ],
-    version = 5,
+    version = 6,
     exportSchema = true,
 )
 abstract class LocalScribeDatabase : RoomDatabase() {
@@ -35,8 +35,13 @@ abstract class LocalScribeDatabase : RoomDatabase() {
                     context.applicationContext,
                     LocalScribeDatabase::class.java,
                     "localscribe.db",
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
-                .build()
+                ).addMigrations(
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5,
+                    MIGRATION_5_6,
+                ).build()
 
         val MIGRATION_1_2 =
             object : Migration(1, 2) {
@@ -72,6 +77,15 @@ abstract class LocalScribeDatabase : RoomDatabase() {
             object : Migration(3, 4) {
                 override fun migrate(db: SupportSQLiteDatabase) {
                     db.execSQL("ALTER TABLE audio_sources ADD COLUMN contentFingerprint TEXT")
+                }
+            }
+
+        val MIGRATION_5_6 =
+            object : Migration(5, 6) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE audio_sources ADD COLUMN recordedAtEpochMs INTEGER")
+                    db.execSQL("ALTER TABLE audio_sources ADD COLUMN addedAtEpochMs INTEGER")
+                    db.execSQL("ALTER TABLE audio_sources ADD COLUMN customTitle TEXT")
                 }
             }
 

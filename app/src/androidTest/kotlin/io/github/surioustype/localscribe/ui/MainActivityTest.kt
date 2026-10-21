@@ -26,7 +26,7 @@ class MainActivityTest {
     @Test fun onboardingExplainsOfflinePrivacy() {
         rule.onNodeWithText("Ваши записи остаются на вашем устройстве").assertIsDisplayed()
         rule.onNodeWithText("Начать").performClick()
-        rule.onNodeWithText("Поиск записей…").assertIsDisplayed()
+        rule.onNodeWithText("Поиск по записям и тексту…").assertIsDisplayed()
     }
 
     @Test fun navigationShowsModelsAndSettings() {
@@ -42,6 +42,6 @@ class MainActivityTest {
         rule.activityRule.scenario.onActivity {
             it.onBackPressedDispatcher.onBackPressed()
         }
-        rule.onNodeWithText("Поиск записей…").assertIsDisplayed()
+        rule.onNodeWithText("Поиск по записям и тексту…").assertIsDisplayed()
     }
 }

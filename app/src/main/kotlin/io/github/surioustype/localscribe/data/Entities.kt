@@ -18,6 +18,9 @@ data class AudioSourceEntity(
     val accessStatus: String,
     val hasPersistedPermission: Boolean,
     val contentFingerprint: String?,
+    val recordedAtEpochMs: Long? = null,
+    val addedAtEpochMs: Long? = null,
+    val customTitle: String? = null,
 )
 
 @Entity(
