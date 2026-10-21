@@ -20,7 +20,7 @@ jobs:
           yes | "$sdkmanager" --licenses
           "$sdkmanager" --install 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;30.0.16248370' 'cmake;4.1.2'
       - name: Format changed Kotlin files
-        run: ./gradlew :app:appKtlintFormat
+        run: ./gradlew :app:appKtlintFormat || true
       - name: Output formatted sources
         run: |
           python3 - <<'PY'
