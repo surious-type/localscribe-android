@@ -111,6 +111,7 @@ import io.github.surioustype.localscribe.core.model.InstalledModel
 import io.github.surioustype.localscribe.core.model.JobStatus
 import io.github.surioustype.localscribe.core.model.ModelKind
 import io.github.surioustype.localscribe.core.model.TranscriptionConfig
+import io.github.surioustype.localscribe.core.model.TranscriptSegment
 import io.github.surioustype.localscribe.core.model.TranscriptionJob
 import io.github.surioustype.localscribe.core.model.UpdateAvailability
 import io.github.surioustype.localscribe.core.model.VadConfig
@@ -1407,6 +1408,9 @@ private fun TranscriptScreen(
     }
     var editText by rememberSaveable { mutableStateOf("") }
     var editError by remember { mutableStateOf<String?>(null) }
+    var undoLastEdit by remember(jobId) {
+        mutableStateOf<Pair<TranscriptSegment, String>?>(null)
+    }
     var followPlayback by rememberSaveable { mutableStateOf(true) }
     var programmaticScroll by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
@@ -1745,6 +1749,32 @@ private fun TranscriptScreen(
             }
             item { Spacer(Modifier.height(16.dp)) }
         }
+        undoLastEdit?.let { (original, previousText) ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Последнее исправление можно отменить",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                TextButton(
+                    onClick = {
+                        scope.launch {
+                            runCatching {
+                                graph.transcriptCorrections.save(jobId, original, previousText)
+                            }.onSuccess {
+                                undoLastEdit = null
+                            }.onFailure {
+                                setStatus("Не удалось отменить исправление")
+                            }
+                        }
+                    },
+                ) { Text("Отменить правку") }
+            }
+        }
         if (!followPlayback) {
             TextButton(
                 onClick = { followPlayback = true },
@@ -1886,6 +1916,7 @@ private fun TranscriptScreen(
                                 runCatching {
                                     graph.transcriptCorrections.restore(jobId, original.id)
                                 }.onSuccess {
+                                    undoLastEdit = original to correction.editedText
                                     editTarget = null
                                 }.onFailure {
                                     editError = "Не удалось восстановить исходный текст"
@@ -1899,10 +1930,15 @@ private fun TranscriptScreen(
                 TextButton(
                     enabled = editText.isNotBlank(),
                     onClick = {
+                        val newText = editText
+                        val previousText = correction?.editedText ?: original.text
                         scope.launch {
                             runCatching {
-                                graph.transcriptCorrections.save(jobId, original, editText)
+                                graph.transcriptCorrections.save(jobId, original, newText)
                             }.onSuccess {
+                                if (newText != previousText) {
+                                    undoLastEdit = original to previousText
+                                }
                                 editTarget = null
                             }.onFailure {
                                 editError = "Не удалось сохранить исправление"
