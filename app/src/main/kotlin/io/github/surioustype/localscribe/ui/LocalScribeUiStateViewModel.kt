@@ -44,6 +44,9 @@ class LocalScribeUiStateViewModel(
                 destination = state[DESTINATION] ?: "HOME",
                 selectedSourceId = state[SELECTED_SOURCE],
                 transcriptJobId = state[TRANSCRIPT_JOB],
+                processingVisible = state[PROCESSING_VISIBLE] ?: false,
+                libraryQuery = state[LIBRARY_QUERY] ?: "",
+                transcriptSeekToMs = state[TRANSCRIPT_SEEK],
                 transcriptQuery = state[TRANSCRIPT_QUERY] ?: "",
                 exportFormat = state[EXPORT_FORMAT],
                 statusMessage = state[STATUS_MESSAGE],
@@ -65,13 +68,14 @@ class LocalScribeUiStateViewModel(
         if (value == current) return
         destinationHistory.add(current)
         state[DESTINATION_HISTORY] = ArrayList(destinationHistory)
-        update { it.copy(destination = value) }
+        update { it.copy(destination = value, processingVisible = false) }
     }
 
     /** Android Back returns through visited tabs, then the recordings root. */
     fun navigateBack() {
         val current = mutable.value
         when {
+            current.processingVisible -> showProcessing(false)
             current.transcriptJobId != null -> showTranscript(null)
             current.selectedSourceId != null && returnTranscriptAfterRerun != null -> {
                 val previous = returnTranscriptAfterRerun
@@ -90,10 +94,26 @@ class LocalScribeUiStateViewModel(
     }
 
     fun canNavigateBack(): Boolean =
-        mutable.value.transcriptJobId != null ||
+        mutable.value.processingVisible ||
+            mutable.value.transcriptJobId != null ||
             mutable.value.selectedSourceId != null ||
             destinationHistory.isNotEmpty() ||
             mutable.value.destination != "HOME"
+
+    fun showProcessing(visible: Boolean) = update { it.copy(processingVisible = visible) }
+
+    fun setLibraryQuery(query: String) = update { it.copy(libraryQuery = query) }
+
+    fun openTranscriptAt(jobId: String, startMs: Long, query: String) =
+        update {
+            it.copy(
+                transcriptJobId = jobId,
+                selectedSourceId = null,
+                processingVisible = false,
+                transcriptSeekToMs = startMs,
+                transcriptQuery = query,
+            )
+        }
 
     fun selectSource(value: String?) {
         if (value == null) {
@@ -114,6 +134,7 @@ class LocalScribeUiStateViewModel(
             it.copy(
                 selectedSourceId = if (completedJobId == null) sourceId else null,
                 transcriptJobId = completedJobId,
+                transcriptSeekToMs = null,
             )
         }
     }
@@ -131,7 +152,8 @@ class LocalScribeUiStateViewModel(
         }
     }
 
-    fun showTranscript(value: String?) = update { it.copy(transcriptJobId = value) }
+    fun showTranscript(value: String?) =
+        update { it.copy(transcriptJobId = value, transcriptSeekToMs = null) }
 
     fun setTranscriptQuery(value: String) = update { it.copy(transcriptQuery = value) }
 
@@ -188,6 +210,9 @@ class LocalScribeUiStateViewModel(
         state[DESTINATION] = next.destination
         state[SELECTED_SOURCE] = next.selectedSourceId
         state[TRANSCRIPT_JOB] = next.transcriptJobId
+        state[PROCESSING_VISIBLE] = next.processingVisible
+        state[LIBRARY_QUERY] = next.libraryQuery
+        state[TRANSCRIPT_SEEK] = next.transcriptSeekToMs
         state[TRANSCRIPT_QUERY] = next.transcriptQuery
         state[EXPORT_FORMAT] = next.exportFormat
         state[STATUS_MESSAGE] = next.statusMessage
@@ -223,6 +248,9 @@ class LocalScribeUiStateViewModel(
         const val SELECTED_SOURCE = "selected_source"
         const val RETURN_TRANSCRIPT_AFTER_RERUN = "return_transcript_after_rerun"
         const val TRANSCRIPT_JOB = "transcript_job"
+        const val PROCESSING_VISIBLE = "processing_visible"
+        const val LIBRARY_QUERY = "library_query"
+        const val TRANSCRIPT_SEEK = "transcript_seek"
         const val TRANSCRIPT_QUERY = "transcript_query"
         const val EXPORT_FORMAT = "export_format"
         const val STATUS_MESSAGE = "status_message"
@@ -246,6 +274,9 @@ data class LocalScribeUiState(
     val destination: String,
     val selectedSourceId: String?,
     val transcriptJobId: String?,
+    val processingVisible: Boolean,
+    val libraryQuery: String,
+    val transcriptSeekToMs: Long?,
     val transcriptQuery: String,
     val exportFormat: String?,
     val statusMessage: String?,
