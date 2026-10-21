@@ -36,8 +36,10 @@ class TranscriptCorrectionStoreTest {
             val reopened = TranscriptCorrectionStore(context)
             assertEquals(
                 "Edited text\nAnother paragraph",
-                applyTranscriptCorrections(listOf(original), reopened.observe(jobId).value)
-                    .single().text,
+                applyTranscriptCorrections(
+                    listOf(original),
+                    reopened.observe(jobId).value,
+                ).single().text,
             )
             reopened.restore(jobId, original.id)
             assertFalse(reopened.observe(jobId).value.containsKey(original.id))
