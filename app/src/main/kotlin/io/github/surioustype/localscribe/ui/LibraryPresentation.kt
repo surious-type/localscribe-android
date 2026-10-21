@@ -59,7 +59,11 @@ fun libraryRecordPresentation(
             LibraryRecordPresentation(
                 LibraryRecordState.RUNNING,
                 "Распознаётся",
-                "Нажмите, чтобы открыть очередь обработки",
+                if (completed) {
+                    "Предыдущий текст доступен; новая версия обрабатывается"
+                } else {
+                    "Нажмите, чтобы открыть очередь обработки"
+                },
             )
         JobStatus.PENDING ->
             LibraryRecordPresentation(
