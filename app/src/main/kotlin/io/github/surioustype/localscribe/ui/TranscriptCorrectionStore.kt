@@ -22,7 +22,9 @@ class TranscriptCorrectionStore(context: Context) {
     private val mutex = Mutex()
     private val observed = mutableMapOf<String, MutableStateFlow<Map<String, TranscriptCorrection>>>()
 
-    fun observe(jobId: String): StateFlow<Map<String, TranscriptCorrection>> =
+    fun observe(jobId: String): StateFlow<Map<String, TranscriptCorrection>> = mutable(jobId)
+
+    private fun mutable(jobId: String): MutableStateFlow<Map<String, TranscriptCorrection>> =
         synchronized(observed) {
             observed.getOrPut(jobId) { MutableStateFlow(read(jobId)) }
         }
@@ -32,7 +34,7 @@ class TranscriptCorrectionStore(context: Context) {
         require(editedText.isNotBlank() && editedText.length <= MAX_EDIT_LENGTH)
         withContext(Dispatchers.IO) {
             mutex.withLock {
-                val state = observe(jobId) as MutableStateFlow
+                val state = mutable(jobId)
                 val next = state.value.toMutableMap()
                 if (editedText == original.text) {
                     next.remove(original.id)
@@ -57,7 +59,7 @@ class TranscriptCorrectionStore(context: Context) {
     suspend fun restore(jobId: String, segmentId: String) {
         withContext(Dispatchers.IO) {
             mutex.withLock {
-                val state = observe(jobId) as MutableStateFlow
+                val state = mutable(jobId)
                 if (segmentId !in state.value) return@withLock
                 val next = state.value.toMutableMap().apply { remove(segmentId) }
                 val json = JSONObject()
