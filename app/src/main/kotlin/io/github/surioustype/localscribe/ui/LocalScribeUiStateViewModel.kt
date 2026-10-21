@@ -60,7 +60,6 @@ class LocalScribeUiStateViewModel(
         update {
             it.copy(
                 transcriptJobId = value,
-                selectedSourceId = if (value != null) null else it.selectedSourceId,
                 transcriptSeekToMs = null,
                 transcriptQuery = if (value != null) "" else it.transcriptQuery,
             )

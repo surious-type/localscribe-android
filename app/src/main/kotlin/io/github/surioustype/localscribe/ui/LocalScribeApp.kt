@@ -181,7 +181,6 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                 savedUi.selectedSourceId != null -> "Настройка транскрибации"
                 processing -> "Очередь обработки"
                 destination == Destination.HOME -> "LocalScribe"
-                destination == Destination.PROCESSING -> "Обработка"
                 destination == Destination.MODELS -> "Модели"
                 else -> "Настройки"
             }
