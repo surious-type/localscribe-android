@@ -14,9 +14,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -283,14 +285,18 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                 }
             },
         ) { padding ->
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .widthIn(max = 900.dp)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            Box(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                when {
+                Column(
+                    modifier =
+                        Modifier
+                            .widthIn(max = 900.dp)
+                            .fillMaxHeight()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    when {
                     savedUi.transcriptJobId != null -> {
                         val selectedJobId = requireNotNull(savedUi.transcriptJobId)
                         key(selectedJobId) {
@@ -335,6 +341,7 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                         Settings(graph, preferences, { appearanceMode = it }, {
                             dynamicColors = it
                         })
+                    }
                 }
             }
         }
@@ -474,12 +481,27 @@ private fun Home(
             )
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { picker.launch(arrayOf("audio/*")) }) {
-                    Text("＋ Импорт")
-                }
-                OutlinedButton(onClick = { permission.launch(mediaPermission) }) {
-                    Text("Показать записи")
+            BoxWithConstraints {
+                if (maxWidth < 390.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { picker.launch(arrayOf("audio/*")) },
+                        ) { Text("Импортировать аудио") }
+                        OutlinedButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { permission.launch(mediaPermission) },
+                        ) { Text("Показать записи на устройстве") }
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { picker.launch(arrayOf("audio/*")) }) {
+                            Text("Импортировать аудио")
+                        }
+                        OutlinedButton(onClick = { permission.launch(mediaPermission) }) {
+                            Text("Показать записи")
+                        }
+                    }
                 }
             }
         }
@@ -554,164 +576,65 @@ private fun Home(
             if (hits.isEmpty()) {
                 item {
                     LibraryEmptyState(
-                        "Совпадений нет",
-                        "Проверьте запрос или измените фильтр записей.",
+                        title = "Совпадений нет",
+                        description = "Попробуйте другой запрос или покажите все записи.",
+                        actionLabel = "Сбросить поиск и фильтр",
+                        onAction = {
+                            uiModel.setLibraryQuery("")
+                            filter = "all"
+                            preferences.libraryFilter = "all"
+                        },
                     )
                 }
             }
             items(hits) { hit ->
-                Card(
-                    modifier =
-                        Modifier.fillMaxWidth().clickable {
-                            if (hit.jobId != null && hit.startMs != null) {
-                                uiModel.openTranscriptAt(hit.jobId, hit.startMs, query)
-                            } else {
-                                openRecord(hit.record)
-                            }
-                        },
-                    colors = localScribeCardColors(),
-                    shape = localScribeShape,
-                ) {
-                    Column(
-                        Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(libraryTitle(hit.record), style = MaterialTheme.typography.titleMedium)
-                        if (hit.startMs != null) {
-                            Text(
-                                "В тексте · " + formatAudioDuration(hit.startMs),
-                                color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        } else {
-                            Text(
-                                "Совпадение в названии",
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        }
-                        hit.snippet?.let { Text(it, maxLines = 3) }
+                LibrarySearchResultCard(hit) {
+                    if (hit.jobId != null && hit.startMs != null) {
+                        uiModel.openTranscriptAt(hit.jobId, hit.startMs, query)
+                    } else {
+                        openRecord(hit.record)
                     }
                 }
             }
         } else {
             if (ordered.isEmpty()) {
                 item {
-                    LibraryEmptyState(
-                        if (sources.isEmpty()) {
-                            "Записей пока нет"
-                        } else {
-                            "Нет записей с этим статусом"
-                        },
-                        if (sources.isEmpty()) {
-                            "Импортируйте аудио или разрешите доступ к записям на устройстве."
-                        } else {
-                            "Попробуйте другой фильтр."
-                        },
-                    )
+                    if (sources.isEmpty()) {
+                        LibraryEmptyState(
+                            title = "Записей пока нет",
+                            description =
+                                "Добавьте аудиофайл, чтобы начать локальную расшифровку. " +
+                                    "Ваши записи останутся на устройстве.",
+                            actionLabel = "Импортировать аудио",
+                            onAction = { picker.launch(arrayOf("audio/*")) },
+                        )
+                    } else {
+                        LibraryEmptyState(
+                            title = "Нет записей с этим статусом",
+                            description = "Попробуйте другой фильтр, чтобы увидеть остальные записи.",
+                            actionLabel = "Показать все записи",
+                            onAction = {
+                                filter = "all"
+                                preferences.libraryFilter = "all"
+                            },
+                        )
+                    }
                 }
             }
             items(ordered, key = { it.source.id }) { record ->
-                val latest =
-                    jobs
-                        .filter { it.sourceId == record.source.id }
-                        .maxByOrNull { it.createdAtEpochMs }
-                val completed =
-                    jobs.any {
-                        it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
-                    }
-                val active =
-                    jobs.any {
-                        it.sourceId == record.source.id &&
-                            it.status in
-                            setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
-                    }
-                val label =
-                    when {
-                        record.accessStatus.name != "AVAILABLE" ->
-                            localizedSourceStatus(record.accessStatus.name)
-                        active -> localizedJobStatus(latest?.status?.name ?: "PENDING")
-                        completed -> "Расшифровка готова"
-                        latest?.status == JobStatus.FAILED -> "Ошибка обработки"
-                        else -> "Без расшифровки"
-                    }
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = localScribeCardColors(),
-                    shape = localScribeShape,
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Mic,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 12.dp),
-                        )
-                        Column(
-                            Modifier
-                                .weight(1f)
-                                .clickable { openRecord(record) }
-                                .padding(vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(5.dp),
-                        ) {
-                            Text(
-                                libraryTitle(record),
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                formatAudioDuration(record.source.durationMs) +
-                                    " · " + label,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            record.recordedAtEpochMs?.let {
-                                Text(
-                                    "Записано: " + formatLocalDate(it),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                            Text(
-                                record.addedAtEpochMs?.let {
-                                    "Добавлено: " + formatLocalDate(it)
-                                } ?: "Дата добавления неизвестна",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        var menuOpen by remember { mutableStateOf(false) }
-                        Box {
-                            IconButton(onClick = { menuOpen = true }) {
-                                Icon(Icons.Default.Tune, contentDescription = "Действия с записью")
-                            }
-                            androidx.compose.material3.DropdownMenu(
-                                expanded = menuOpen,
-                                onDismissRequest = { menuOpen = false },
-                            ) {
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text("Переименовать") },
-                                    onClick = {
-                                        renameText = libraryTitle(record)
-                                        renameTarget = record
-                                        menuOpen = false
-                                    },
-                                )
-                                if (completed) {
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Распознать заново") },
-                                        onClick = {
-                                            menuOpen = false
-                                            uiModel.retranscribe(record.source.id)
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                val recordJobs = jobs.filter { it.sourceId == record.source.id }
+                val presentation = libraryRecordPresentation(record, recordJobs)
+                LibraryRecordingCard(
+                    record = record,
+                    presentation = presentation,
+                    hasTranscript = recordJobs.any { it.status == JobStatus.COMPLETED },
+                    onOpen = { openRecord(record) },
+                    onRename = {
+                        renameText = libraryTitle(record)
+                        renameTarget = record
+                    },
+                    onRetranscribe = { uiModel.retranscribe(record.source.id) },
+                )
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
@@ -749,23 +672,6 @@ private fun Home(
                 TextButton(onClick = { renameTarget = null }) { Text("Отмена") }
             },
         )
-    }
-}
-
-@Composable
-private fun LibraryEmptyState(title: String, description: String) {
-    Card(colors = localScribeCardColors(), shape = localScribeShape) {
-        Column(
-            Modifier.fillMaxWidth().padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
     }
 }
 
