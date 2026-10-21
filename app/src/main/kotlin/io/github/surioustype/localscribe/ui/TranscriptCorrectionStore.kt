@@ -12,15 +12,19 @@ import org.json.JSONObject
 import java.io.IOException
 
 /**
- * Per-job durable, private edits. The authoritative transcript in Room is never modified.
- * A single SharedPreferences commit atomically publishes a job's set of corrections.
- * No network, backup export, or permissions are involved.
+ * Durable per-job corrections in private app storage, separate from immutable Room ASR segments.
+ * Each commit atomically replaces one job's correction map. Backups are disabled in the manifest.
  */
 class TranscriptCorrectionStore(context: Context) {
     private val preferences =
-        context.applicationContext.getSharedPreferences("transcript_corrections", Context.MODE_PRIVATE)
+        context.applicationContext.getSharedPreferences(
+            "transcript_corrections",
+            Context.MODE_PRIVATE,
+        )
     private val mutex = Mutex()
-    private val observed = mutableMapOf<String, MutableStateFlow<Map<String, TranscriptCorrection>>>()
+    private val observed =
+        mutableMapOf<String, MutableStateFlow<Map<String, TranscriptCorrection>>>()
+    private val unreadableJobs = mutableSetOf<String>()
 
     fun observe(jobId: String): StateFlow<Map<String, TranscriptCorrection>> = mutable(jobId)
 
@@ -41,16 +45,7 @@ class TranscriptCorrectionStore(context: Context) {
                 } else {
                     next[original.id] = TranscriptCorrection(original.text, editedText)
                 }
-                val json = JSONObject()
-                next.forEach { (id, edit) ->
-                    json.put(
-                        id,
-                        JSONObject().put("original", edit.originalText).put("edited", edit.editedText),
-                    )
-                }
-                if (!preferences.edit().putString(jobId, json.toString()).commit()) {
-                    throw IOException("Could not save transcript correction")
-                }
+                persist(jobId, next)
                 state.value = next.toMap()
             }
         }
@@ -62,18 +57,27 @@ class TranscriptCorrectionStore(context: Context) {
                 val state = mutable(jobId)
                 if (segmentId !in state.value) return@withLock
                 val next = state.value.toMutableMap().apply { remove(segmentId) }
-                val json = JSONObject()
-                next.forEach { (id, edit) ->
-                    json.put(
-                        id,
-                        JSONObject().put("original", edit.originalText).put("edited", edit.editedText),
-                    )
-                }
-                if (!preferences.edit().putString(jobId, json.toString()).commit()) {
-                    throw IOException("Could not restore original transcript")
-                }
+                persist(jobId, next)
                 state.value = next.toMap()
             }
+        }
+    }
+
+    private fun persist(jobId: String, corrections: Map<String, TranscriptCorrection>) {
+        if (synchronized(unreadableJobs) { jobId in unreadableJobs }) {
+            throw IOException("Stored corrections cannot be read; refusing to overwrite them")
+        }
+        val json = JSONObject()
+        corrections.forEach { (id, edit) ->
+            json.put(
+                id,
+                JSONObject()
+                    .put("original", edit.originalText)
+                    .put("edited", edit.editedText),
+            )
+        }
+        if (!preferences.edit().putString(jobId, json.toString()).commit()) {
+            throw IOException("Could not save transcript corrections")
         }
     }
 
@@ -94,7 +98,10 @@ class TranscriptCorrectionStore(context: Context) {
                     )
                 }
             }
-        }.getOrDefault(emptyMap())
+        }.getOrElse {
+            synchronized(unreadableJobs) { unreadableJobs.add(jobId) }
+            emptyMap()
+        }
 
     private companion object {
         const val MAX_EDIT_LENGTH = 50_000
