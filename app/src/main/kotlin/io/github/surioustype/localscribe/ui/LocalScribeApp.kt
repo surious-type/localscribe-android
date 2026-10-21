@@ -254,28 +254,30 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                             }
                         }
                         NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
-                            Destination.entries.filter { it != Destination.PROCESSING }.forEach { item ->
-                            val icon =
-                                when (item) {
-                                    Destination.HOME -> Icons.Default.Home
-                                    Destination.PROCESSING -> Icons.Default.Mic
-                                    Destination.MODELS -> Icons.Default.Folder
-                                    Destination.SETTINGS -> Icons.Default.Settings
+                            Destination.entries
+                                .filter { it != Destination.PROCESSING }
+                                .forEach { item ->
+                                    val icon =
+                                        when (item) {
+                                            Destination.HOME -> Icons.Default.Home
+                                            Destination.PROCESSING -> Icons.Default.Mic
+                                            Destination.MODELS -> Icons.Default.Folder
+                                            Destination.SETTINGS -> Icons.Default.Settings
+                                        }
+                                    val label =
+                                        when (item) {
+                                            Destination.HOME -> "Записи"
+                                            Destination.PROCESSING -> "Обработка"
+                                            Destination.MODELS -> "Модели"
+                                            Destination.SETTINGS -> "Настройки"
+                                        }
+                                    NavigationBarItem(
+                                        selected = destination == item,
+                                        onClick = { uiModel.selectDestination(item.name) },
+                                        icon = { Icon(icon, contentDescription = label) },
+                                        label = { Text(label) },
+                                    )
                                 }
-                            val label =
-                                when (item) {
-                                    Destination.HOME -> "Записи"
-                                    Destination.PROCESSING -> "Обработка"
-                                    Destination.MODELS -> "Модели"
-                                    Destination.SETTINGS -> "Настройки"
-                                }
-                            NavigationBarItem(
-                                selected = destination == item,
-                                onClick = { uiModel.selectDestination(item.name) },
-                                icon = { Icon(icon, contentDescription = label) },
-                                label = { Text(label) },
-                            )
-                        }
                         }
                     }
                 }
