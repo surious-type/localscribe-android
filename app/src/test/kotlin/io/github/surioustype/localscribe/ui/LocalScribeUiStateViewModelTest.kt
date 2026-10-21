@@ -187,6 +187,7 @@ class LocalScribeUiStateViewModelTest {
         assertEquals(null, afterExportResult.exportFormat)
         assertEquals("Transcript exported", afterExportResult.statusMessage)
     }
+
     @Test
     fun librarySearchTargetRetainsTimestampAfterRecreation() {
         val handle = SavedStateHandle()
@@ -217,6 +218,4 @@ class LocalScribeUiStateViewModelTest {
         restored.navigateBack()
         assertEquals("HOME", restored.uiState.value.destination)
     }
-
-
 }
