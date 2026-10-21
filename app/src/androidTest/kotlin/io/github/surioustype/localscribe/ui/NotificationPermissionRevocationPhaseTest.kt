@@ -7,6 +7,7 @@ import android.os.SystemClock
 import android.view.accessibility.AccessibilityNodeInfo
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createAndroidComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithText
@@ -49,7 +50,7 @@ class NotificationPermissionRevocationPhaseTest {
                 .commit()
         }
         rule.activityRule.scenario.recreate()
-        rule.onNodeWithText("Поиск записей…").assertIsDisplayed()
+        rule.onNodeWithText("Поиск по записям и тексту…").assertIsDisplayed()
     }
 
     @Test
@@ -97,7 +98,7 @@ class NotificationPermissionRevocationPhaseTest {
         rule.activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS)
 
     private fun tapNewestResume() {
-        rule.onNodeWithText("Обработка").performClick()
+        rule.onNodeWithContentDescription("Открыть очередь обработки").performClick()
         rule.waitUntil(
             5_000,
         ) { rule.onAllNodesWithText("Продолжить").fetchSemanticsNodes().isNotEmpty() }
