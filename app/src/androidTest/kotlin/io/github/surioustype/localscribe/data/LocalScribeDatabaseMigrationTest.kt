@@ -187,7 +187,7 @@ class LocalScribeDatabaseMigrationTest {
     }
 
     @Test
-    fun migration4To5AllowsFingerprintRestartToReplaceLegacyCheckpoints() =
+    fun migration4To6AllowsFingerprintRestartToReplaceLegacyCheckpoints() =
         runBlocking {
             helper.createDatabase(RESTART_DATABASE_NAME, 4).apply {
                 execSQL(
@@ -227,9 +227,10 @@ class LocalScribeDatabaseMigrationTest {
             helper
                 .runMigrationsAndValidate(
                     RESTART_DATABASE_NAME,
-                    5,
+                    6,
                     true,
                     LocalScribeDatabase.MIGRATION_4_5,
+                    LocalScribeDatabase.MIGRATION_5_6,
                 ).close()
 
             val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -284,8 +285,56 @@ class LocalScribeDatabaseMigrationTest {
             }
         }
 
+    @Test
+    fun migration5To6PreservesAudioAndAddsOptionalMetadata() {
+        helper.createDatabase(METADATA_DATABASE_NAME, 5).apply {
+            execSQL(
+                "INSERT INTO audio_sources " +
+                    "(id, uri, displayName, durationMs, mimeType, accessStatus, " +
+                    "hasPersistedPermission, contentFingerprint) VALUES " +
+                    "('source', 'content://source', 'Lecture', 1000, 'audio/wav', " +
+                    "'AVAILABLE', 1, 'source-hash')",
+            )
+            close()
+        }
+
+        helper
+            .runMigrationsAndValidate(
+                METADATA_DATABASE_NAME,
+                6,
+                true,
+                LocalScribeDatabase.MIGRATION_5_6,
+            ).use { database ->
+                database
+                    .query(
+                        "SELECT displayName, contentFingerprint, recordedAtEpochMs, " +
+                            "addedAtEpochMs, customTitle FROM audio_sources WHERE id = 'source'",
+                    ).use { cursor ->
+                        assertEquals(true, cursor.moveToFirst())
+                        assertEquals("Lecture", cursor.getString(0))
+                        assertEquals("source-hash", cursor.getString(1))
+                        assertNull(cursor.getString(2))
+                        assertNull(cursor.getString(3))
+                        assertNull(cursor.getString(4))
+                    }
+                database.execSQL(
+                    "UPDATE audio_sources SET customTitle = 'My lecture', " +
+                        "addedAtEpochMs = 1234 WHERE id = 'source'",
+                )
+                database
+                    .query(
+                        "SELECT customTitle, addedAtEpochMs FROM audio_sources WHERE id = 'source'",
+                    ).use { cursor ->
+                        assertEquals(true, cursor.moveToFirst())
+                        assertEquals("My lecture", cursor.getString(0))
+                        assertEquals(1234L, cursor.getLong(1))
+                    }
+            }
+    }
+
     private companion object {
         const val DATABASE_NAME = "migration-test"
         const val RESTART_DATABASE_NAME = "migration-restart-test"
+        const val METADATA_DATABASE_NAME = "migration-metadata-test"
     }
 }
