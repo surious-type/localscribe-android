@@ -43,13 +43,23 @@ fun libraryRecordPresentation(
     val latest = jobs.maxByOrNull { it.createdAtEpochMs }
 
     if (source.accessStatus != SourceAccessStatus.AVAILABLE) {
+        val missing = source.accessStatus == SourceAccessStatus.MISSING
         return LibraryRecordPresentation(
             LibraryRecordState.SOURCE_UNAVAILABLE,
-            "Нет доступа к аудио",
+            if (missing) "Исходный файл недоступен" else "Нужен доступ к аудио",
             if (completed) {
-                "Готовый текст сохранён. Для прослушивания восстановите доступ к файлу."
+                "Готовый текст сохранён. " +
+                    if (missing) {
+                        "Укажите исходный файл для прослушивания."
+                    } else {
+                        "Восстановите доступ к файлу для прослушивания."
+                    }
             } else {
-                "Откройте запись и восстановите доступ к исходному файлу."
+                if (missing) {
+                    "Укажите исходный файл, чтобы продолжить обработку."
+                } else {
+                    "Предоставьте доступ к исходному файлу, чтобы продолжить."
+                }
             },
         )
     }
