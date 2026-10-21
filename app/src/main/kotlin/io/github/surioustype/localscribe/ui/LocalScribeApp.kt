@@ -335,7 +335,13 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                             }
                         }
                         processing -> Processing(graph, uiModel)
-                        destination == Destination.HOME -> Home(graph, receivedUri, uiModel, savedUi)
+                        destination == Destination.HOME ->
+                            Home(
+                                graph,
+                                receivedUri,
+                                uiModel,
+                                savedUi,
+                            )
                         destination == Destination.MODELS -> Models(graph, uiModel, savedUi)
                         else ->
                             Settings(graph, preferences, { appearanceMode = it }, {
@@ -618,7 +624,9 @@ private fun Home(
                     } else {
                         LibraryEmptyState(
                             title = "Нет записей с этим статусом",
-                            description = "Попробуйте другой фильтр, чтобы увидеть остальные записи.",
+                            description =
+                                "Попробуйте другой фильтр, " +
+                                    "чтобы увидеть остальные записи.",
                             actionLabel = "Показать все записи",
                             onAction = {
                                 filter = "all"
