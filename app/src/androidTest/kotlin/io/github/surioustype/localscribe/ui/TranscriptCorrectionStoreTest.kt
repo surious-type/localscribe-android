@@ -45,8 +45,10 @@ class TranscriptCorrectionStoreTest {
             assertFalse(reopened.observe(jobId).value.containsKey(original.id))
             assertEquals(
                 "Whisper original",
-                applyTranscriptCorrections(listOf(original), reopened.observe(jobId).value)
-                    .single().text,
+                applyTranscriptCorrections(
+                    listOf(original),
+                    reopened.observe(jobId).value,
+                ).single().text,
             )
         }
 
