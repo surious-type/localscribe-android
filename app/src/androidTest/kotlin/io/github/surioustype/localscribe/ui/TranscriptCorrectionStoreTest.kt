@@ -52,7 +52,6 @@ class TranscriptCorrectionStoreTest {
             )
         }
 
-
     @Test
     fun undoRestoresPreviousCorrectionAfterEditingOrRestoringOriginal() =
         runBlocking {
