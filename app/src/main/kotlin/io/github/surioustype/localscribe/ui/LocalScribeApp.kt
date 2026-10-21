@@ -279,10 +279,12 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                     .widthIn(max = 900.dp)
                     .padding(horizontal = 16.dp, vertical = 8.dp),
             ) {
+                val transcriptJobId = savedUi.transcriptJobId
+                val selectedSourceId = savedUi.selectedSourceId
                 when {
-                    savedUi.transcriptJobId != null ->
+                    transcriptJobId != null ->
                         TranscriptScreen(
-                            savedUi.transcriptJobId,
+                            transcriptJobId,
                             graph,
                             savedUi.transcriptQuery,
                             savedUi.transcriptSeekToMs,
@@ -293,14 +295,14 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                             uiModel::setStatusMessage,
                             close = { uiModel.showTranscript(null) },
                         )
-                    savedUi.selectedSourceId != null -> {
+                    selectedSourceId != null -> {
                         val installed by graph.installedModels
                             .observeInstalledModels()
                             .collectAsStateWithLifecycle(emptyList())
                         LazyColumn {
                             item {
                                 SourceControls(
-                                    savedUi.selectedSourceId,
+                                    selectedSourceId,
                                     installed,
                                     graph,
                                     context,
