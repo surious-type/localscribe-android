@@ -1462,11 +1462,8 @@ private fun TranscriptScreen(
     LaunchedEffect(player, jobId) {
         var lastPosition = -1L
         player.state.collect { current ->
-            if (
-                current.sourceUri != null &&
-                (kotlin.math.abs(current.positionMs - lastPosition) >= 2_000L ||
-                    !current.isPlaying)
-            ) {
+            val moved = kotlin.math.abs(current.positionMs - lastPosition) >= 2_000L
+            if (current.sourceUri != null && (moved || !current.isPlaying)) {
                 playbackPreferences.savePosition(jobId, current.positionMs)
                 lastPosition = current.positionMs
             }
