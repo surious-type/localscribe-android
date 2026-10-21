@@ -139,13 +139,13 @@ class TranscriptPlaybackControllerTest {
             controller.setSpeed(1.5f)
             controller.play("content://audio/one")
             runCurrent()
-            assertEquals(1.5f, first.speed)
+            assertEquals(1.5f, first.lastSpeed)
             assertEquals(1.5f, controller.state.value.speed)
 
             controller.onStop()
             controller.play("content://audio/one")
             runCurrent()
-            assertEquals(1.5f, second.speed)
+            assertEquals(1.5f, second.lastSpeed)
             assertTrue(controller.state.value.isPlaying)
         }
 
@@ -157,9 +157,9 @@ class TranscriptPlaybackControllerTest {
             controller.seekTo("content://audio/one", 0)
             runCurrent()
             controller.setSpeed(3.0f)
-            assertEquals(2.0f, backend.speed)
+            assertEquals(2.0f, backend.lastSpeed)
             controller.setSpeed(0.1f)
-            assertEquals(0.5f, backend.speed)
+            assertEquals(0.5f, backend.lastSpeed)
         }
 
     private class FakeBackend(
@@ -170,7 +170,7 @@ class TranscriptPlaybackControllerTest {
         var playCalls = 0
         var pauseCalls = 0
         var closeCalls = 0
-        var speed = 1f
+        var lastSpeed = 1f
         private var playing = false
         var currentPosition = 3_200L
         private var completionListener: (() -> Unit)? = null
@@ -195,7 +195,7 @@ class TranscriptPlaybackControllerTest {
         }
 
         override fun setSpeed(speed: Float) {
-            this.speed = speed
+            this.lastSpeed = speed
         }
 
         override fun currentPositionMs(): Long = currentPosition
