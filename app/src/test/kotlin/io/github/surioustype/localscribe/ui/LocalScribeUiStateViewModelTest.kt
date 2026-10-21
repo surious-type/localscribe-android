@@ -187,4 +187,36 @@ class LocalScribeUiStateViewModelTest {
         assertEquals(null, afterExportResult.exportFormat)
         assertEquals("Transcript exported", afterExportResult.statusMessage)
     }
+    @Test
+    fun librarySearchTargetRetainsTimestampAfterRecreation() {
+        val handle = SavedStateHandle()
+        val model = LocalScribeUiStateViewModel(handle)
+        model.setLibraryQuery("Ньютон")
+        model.openTranscriptAt("job-123", 42_000L, "Ньютон")
+
+        val restored = LocalScribeUiStateViewModel(handle).uiState.value
+        assertEquals("Ньютон", restored.libraryQuery)
+        assertEquals("job-123", restored.transcriptJobId)
+        assertEquals(42_000L, restored.transcriptSeekToMs)
+        assertEquals("Ньютон", restored.transcriptQuery)
+        assertFalse(restored.processingVisible)
+    }
+
+    @Test
+    fun processingOverlayClosesBeforeNavigatingBackToPreviousTab() {
+        val handle = SavedStateHandle()
+        val model = LocalScribeUiStateViewModel(handle)
+        model.selectDestination("MODELS")
+        model.showProcessing(true)
+
+        val restored = LocalScribeUiStateViewModel(handle)
+        assertTrue(restored.uiState.value.processingVisible)
+        restored.navigateBack()
+        assertFalse(restored.uiState.value.processingVisible)
+        assertEquals("MODELS", restored.uiState.value.destination)
+        restored.navigateBack()
+        assertEquals("HOME", restored.uiState.value.destination)
+    }
+
+
 }
