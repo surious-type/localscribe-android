@@ -39,6 +39,10 @@ import androidx.compose.material.icons.filled.Folder
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Undo
+import androidx.compose.material.icons.filled.Replay10
+import androidx.compose.material.icons.filled.Forward10
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Science
@@ -1384,7 +1388,19 @@ private fun TranscriptScreen(
     val previewSegments by graph.liveTranscript
         .observe(jobId)
         .collectAsStateWithLifecycle(emptyList())
-    val visibleSegments = segments + previewSegments
+    val correctionStore = remember(context) { TranscriptCorrectionStore(context) }
+    LaunchedEffect(jobId) { correctionStore.load(jobId) }
+    val corrections by correctionStore.corrections.collectAsStateWithLifecycle()
+    val correctedSegments = remember(segments, corrections) {
+        segments.map { it.copy(text = corrections[it.id] ?: it.text) }
+    }
+    val visibleSegments = correctedSegments + previewSegments
+    var editingSegment by remember { mutableStateOf<io.github.surioustype.localscribe.core.model.TranscriptSegment?>(null) }
+    var editingText by remember { mutableStateOf("") }
+    var undoEdit by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val playbackPreferences = remember(context) {
+        context.getSharedPreferences("transcript_playback", Context.MODE_PRIVATE)
+    }
     val player =
         remember {
             TranscriptPlaybackController(
@@ -1393,6 +1409,18 @@ private fun TranscriptScreen(
             )
         }
     val playback by player.state.collectAsStateWithLifecycle()
+    val activeSegmentId = remember(visibleSegments, playback.positionMs) {
+        activeTranscriptSegmentId(visibleSegments, playback.positionMs)
+    }
+    var followPlayback by rememberSaveable(jobId) { mutableStateOf(true) }
+    LaunchedEffect(jobId, sourceUri) {
+        sourceUri?.let { player.seekTo(it, playbackPreferences.getLong(jobId, 0L)) }
+    }
+    LaunchedEffect(jobId, playback.positionMs) {
+        if (playback.positionMs > 0L) {
+            playbackPreferences.edit().putLong(jobId, playback.positionMs).apply()
+        }
+    }
     val save =
         rememberLauncherForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
@@ -1413,7 +1441,7 @@ private fun TranscriptScreen(
                                 completeExport(false)
                                 return@launch
                             }
-                    runCatching { TranscriptExporter(context).write(uri, source, segments, format) }
+                    runCatching { TranscriptExporter(context).write(uri, source, correctedSegments, format) }
                         .onSuccess { completeExport(true) }
                         .onFailure { completeExport(false) }
                 }
@@ -1457,7 +1485,7 @@ private fun TranscriptScreen(
     }
     var showExport by remember { mutableStateOf(false) }
     LaunchedEffect(sourceUri, seekToMs) {
-        sourceUri?.let { player.seekTo(it, seekToMs ?: 0L) }
+        if (seekToMs != null) sourceUri?.let { player.seekTo(it, seekToMs) }
     }
     LazyColumn(
         state = transcriptListState,
@@ -1574,7 +1602,7 @@ private fun TranscriptScreen(
                 IconButton(
                     enabled = segments.isNotEmpty(),
                     onClick = {
-                        clipboard.setText(AnnotatedString(segments.joinToString("\n") { it.text }))
+                        clipboard.setText(AnnotatedString(correctedSegments.joinToString("\n") { it.text }))
                     },
                 ) {
                     Icon(Icons.Default.ContentCopy, contentDescription = "Копировать текст")
@@ -1590,7 +1618,7 @@ private fun TranscriptScreen(
                             runCatching {
                                 TranscriptExporter(context).share(
                                     source,
-                                    segments,
+                                    correctedSegments,
                                     ExportFormat.TXT,
                                 )
                             }.onSuccess {
