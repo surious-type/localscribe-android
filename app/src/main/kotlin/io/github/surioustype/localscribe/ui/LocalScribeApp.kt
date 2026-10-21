@@ -1446,7 +1446,11 @@ private fun TranscriptScreen(
             val versionHeader =
                 if (versions.size > 1 ||
                     (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)
-                ) 1 else 0
+                ) {
+                    1
+                } else {
+                    0
+                }
             val rerunButton = if (job?.status == JobStatus.COMPLETED) 1 else 0
             transcriptListState.scrollToItem(nearest + versionHeader + rerunButton + 3)
         }
