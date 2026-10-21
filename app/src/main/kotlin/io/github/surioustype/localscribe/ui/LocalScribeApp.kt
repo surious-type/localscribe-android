@@ -565,7 +565,14 @@ private fun Home(
                 }
             }
         }
-        savedUi.statusMessage?.let { item { Text(it, color = MaterialTheme.colorScheme.primary) } }
+        savedUi.statusMessage?.let { message ->
+            item {
+                LibraryFeedbackMessage(
+                    message = message,
+                    onDismiss = { uiModel.setStatusMessage(null) },
+                )
+            }
+        }
         if (query.isNotBlank()) {
             item {
                 Text(
