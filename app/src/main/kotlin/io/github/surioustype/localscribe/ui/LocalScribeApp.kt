@@ -110,8 +110,8 @@ import io.github.surioustype.localscribe.core.model.InferenceConfig
 import io.github.surioustype.localscribe.core.model.InstalledModel
 import io.github.surioustype.localscribe.core.model.JobStatus
 import io.github.surioustype.localscribe.core.model.ModelKind
-import io.github.surioustype.localscribe.core.model.TranscriptionConfig
 import io.github.surioustype.localscribe.core.model.TranscriptSegment
+import io.github.surioustype.localscribe.core.model.TranscriptionConfig
 import io.github.surioustype.localscribe.core.model.TranscriptionJob
 import io.github.surioustype.localscribe.core.model.UpdateAvailability
 import io.github.surioustype.localscribe.core.model.VadConfig
