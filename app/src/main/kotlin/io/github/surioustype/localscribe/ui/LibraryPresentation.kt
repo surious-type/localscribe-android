@@ -34,11 +34,12 @@ fun libraryRecordPresentation(
 ): LibraryRecordPresentation {
     val jobs = allJobs.filter { it.sourceId == source.source.id }
     val active =
-        jobs.filter {
-            it.status == JobStatus.RUNNING ||
-                it.status == JobStatus.PENDING ||
-                it.status == JobStatus.PAUSED
-        }.maxByOrNull { it.createdAtEpochMs }
+        jobs
+            .filter {
+                it.status == JobStatus.RUNNING ||
+                    it.status == JobStatus.PENDING ||
+                    it.status == JobStatus.PAUSED
+            }.maxByOrNull { it.createdAtEpochMs }
     val completed = jobs.any { it.status == JobStatus.COMPLETED }
     val latest = jobs.maxByOrNull { it.createdAtEpochMs }
 
