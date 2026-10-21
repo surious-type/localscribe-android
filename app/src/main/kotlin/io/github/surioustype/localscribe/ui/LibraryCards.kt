@@ -107,13 +107,14 @@ internal fun LibraryRecordingCard(
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
+                val dateDescription =
+                    record.recordedAtEpochMs?.let {
+                        "Записано: " + formatLocalDate(it)
+                    } ?: record.addedAtEpochMs?.let {
+                        "Добавлено: " + formatLocalDate(it)
+                    } ?: "Дата неизвестна"
                 Text(
-                    formatAudioDuration(record.source.durationMs) + " · " +
-                        (record.recordedAtEpochMs?.let {
-                            "Записано: " + formatLocalDate(it)
-                        } ?: record.addedAtEpochMs?.let {
-                            "Добавлено: " + formatLocalDate(it)
-                        } ?: "Дата неизвестна"),
+                    formatAudioDuration(record.source.durationMs) + " · " + dateDescription,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -149,9 +150,10 @@ internal fun LibraryRecordingCard(
             Box {
                 IconButton(
                     onClick = { menuOpen = true },
-                    modifier = Modifier.semantics {
-                        contentDescription = "Действия с записью " + libraryTitle(record)
-                    },
+                    modifier =
+                        Modifier.semantics {
+                            contentDescription = "Действия с записью " + libraryTitle(record)
+                        },
                 ) {
                     Icon(Icons.Default.Tune, contentDescription = null)
                 }
@@ -187,7 +189,12 @@ internal fun LibrarySearchResultCard(
     onOpen: () -> Unit,
 ) {
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClickLabel = "Открыть совпадение") { onOpen() },
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable(onClickLabel = "Открыть совпадение") {
+                    onOpen()
+                },
         colors = localScribeCardColors(),
         shape = localScribeShape,
     ) {
