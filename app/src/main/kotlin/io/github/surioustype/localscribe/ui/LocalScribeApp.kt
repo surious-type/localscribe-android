@@ -297,50 +297,50 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                             .padding(horizontal = 16.dp, vertical = 8.dp),
                 ) {
                     when {
-                    savedUi.transcriptJobId != null -> {
-                        val selectedJobId = requireNotNull(savedUi.transcriptJobId)
-                        key(selectedJobId) {
-                            TranscriptScreen(
-                                selectedJobId,
-                                graph,
-                                savedUi.transcriptQuery,
-                                savedUi.transcriptSeekToMs,
-                                savedUi.exportFormat,
-                                uiModel::setTranscriptQuery,
-                                uiModel::setExportFormat,
-                                uiModel::completeTranscriptExport,
-                                uiModel::setStatusMessage,
-                                onChooseVersion = uiModel::showTranscript,
-                                onRetranscribe = uiModel::retranscribe,
-                                close = { uiModel.showTranscript(null) },
-                            )
-                        }
-                    }
-                    savedUi.selectedSourceId != null -> {
-                        val installed by graph.installedModels
-                            .observeInstalledModels()
-                            .collectAsStateWithLifecycle(emptyList())
-                        LazyColumn {
-                            item {
-                                SourceControls(
-                                    requireNotNull(savedUi.selectedSourceId),
-                                    installed,
+                        savedUi.transcriptJobId != null -> {
+                            val selectedJobId = requireNotNull(savedUi.transcriptJobId)
+                            key(selectedJobId) {
+                                TranscriptScreen(
+                                    selectedJobId,
                                     graph,
-                                    context,
-                                    uiModel,
-                                    savedUi,
-                                    close = { uiModel.selectSource(null) },
+                                    savedUi.transcriptQuery,
+                                    savedUi.transcriptSeekToMs,
+                                    savedUi.exportFormat,
+                                    uiModel::setTranscriptQuery,
+                                    uiModel::setExportFormat,
+                                    uiModel::completeTranscriptExport,
+                                    uiModel::setStatusMessage,
+                                    onChooseVersion = uiModel::showTranscript,
+                                    onRetranscribe = uiModel::retranscribe,
+                                    close = { uiModel.showTranscript(null) },
                                 )
                             }
                         }
-                    }
-                    processing -> Processing(graph, uiModel)
-                    destination == Destination.HOME -> Home(graph, receivedUri, uiModel, savedUi)
-                    destination == Destination.MODELS -> Models(graph, uiModel, savedUi)
-                    else ->
-                        Settings(graph, preferences, { appearanceMode = it }, {
-                            dynamicColors = it
-                        })
+                        savedUi.selectedSourceId != null -> {
+                            val installed by graph.installedModels
+                                .observeInstalledModels()
+                                .collectAsStateWithLifecycle(emptyList())
+                            LazyColumn {
+                                item {
+                                    SourceControls(
+                                        requireNotNull(savedUi.selectedSourceId),
+                                        installed,
+                                        graph,
+                                        context,
+                                        uiModel,
+                                        savedUi,
+                                        close = { uiModel.selectSource(null) },
+                                    )
+                                }
+                            }
+                        }
+                        processing -> Processing(graph, uiModel)
+                        destination == Destination.HOME -> Home(graph, receivedUri, uiModel, savedUi)
+                        destination == Destination.MODELS -> Models(graph, uiModel, savedUi)
+                        else ->
+                            Settings(graph, preferences, { appearanceMode = it }, {
+                                dynamicColors = it
+                            })
                     }
                 }
             }
