@@ -32,13 +32,15 @@ class AudioSourceMetadataMigrationTest {
             close()
         }
 
-        helper.runMigrationsAndValidate(
+        helper
+            .runMigrationsAndValidate(
             databaseName,
             6,
             true,
             LocalScribeDatabase.MIGRATION_5_6,
         ).use { database ->
-            database.query(
+            database
+                .query(
                 "SELECT displayName, durationMs, contentFingerprint, " +
                     "recordedAtEpochMs, addedAtEpochMs, customTitle " +
                     "FROM audio_sources WHERE id = 'audio'",
@@ -55,7 +57,8 @@ class AudioSourceMetadataMigrationTest {
                 "UPDATE audio_sources SET customTitle = 'Лекция', " +
                     "addedAtEpochMs = 123456 WHERE id = 'audio'",
             )
-            database.query(
+            database
+                .query(
                 "SELECT customTitle FROM audio_sources WHERE id = 'audio'",
             ).use { cursor ->
                 cursor.moveToFirst()
