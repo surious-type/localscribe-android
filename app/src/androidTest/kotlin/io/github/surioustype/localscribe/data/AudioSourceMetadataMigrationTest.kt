@@ -19,7 +19,7 @@ class AudioSourceMetadataMigrationTest {
         )
 
     @Test
-    fun migration5To6RetainsOriginalAudioAndExistingJobs() {
+    fun migration5To6RetainsOriginalAudioAndMetadata() {
         val databaseName = "audio-source-metadata-migration"
         helper.createDatabase(databaseName, 5).apply {
             execSQL(
@@ -34,36 +34,36 @@ class AudioSourceMetadataMigrationTest {
 
         helper
             .runMigrationsAndValidate(
-            databaseName,
-            6,
-            true,
-            LocalScribeDatabase.MIGRATION_5_6,
-        ).use { database ->
-            database
-                .query(
-                "SELECT displayName, durationMs, contentFingerprint, " +
-                    "recordedAtEpochMs, addedAtEpochMs, customTitle " +
-                    "FROM audio_sources WHERE id = 'audio'",
-            ).use { cursor ->
-                cursor.moveToFirst()
-                assertEquals("Original", cursor.getString(0))
-                assertEquals(1234L, cursor.getLong(1))
-                assertEquals("sha256", cursor.getString(2))
-                assertNull(cursor.getString(3))
-                assertNull(cursor.getString(4))
-                assertNull(cursor.getString(5))
+                databaseName,
+                6,
+                true,
+                LocalScribeDatabase.MIGRATION_5_6,
+            ).use { database ->
+                database
+                    .query(
+                        "SELECT displayName, durationMs, contentFingerprint, " +
+                            "recordedAtEpochMs, addedAtEpochMs, customTitle " +
+                            "FROM audio_sources WHERE id = 'audio'",
+                    ).use { cursor ->
+                        cursor.moveToFirst()
+                        assertEquals("Original", cursor.getString(0))
+                        assertEquals(1234L, cursor.getLong(1))
+                        assertEquals("sha256", cursor.getString(2))
+                        assertNull(cursor.getString(3))
+                        assertNull(cursor.getString(4))
+                        assertNull(cursor.getString(5))
+                    }
+                database.execSQL(
+                    "UPDATE audio_sources SET customTitle = 'Лекция', " +
+                        "addedAtEpochMs = 123456 WHERE id = 'audio'",
+                )
+                database
+                    .query(
+                        "SELECT customTitle FROM audio_sources WHERE id = 'audio'",
+                    ).use { cursor ->
+                        cursor.moveToFirst()
+                        assertEquals("Лекция", cursor.getString(0))
+                    }
             }
-            database.execSQL(
-                "UPDATE audio_sources SET customTitle = 'Лекция', " +
-                    "addedAtEpochMs = 123456 WHERE id = 'audio'",
-            )
-            database
-                .query(
-                "SELECT customTitle FROM audio_sources WHERE id = 'audio'",
-            ).use { cursor ->
-                cursor.moveToFirst()
-                assertEquals("Лекция", cursor.getString(0))
-            }
-        }
     }
 }
