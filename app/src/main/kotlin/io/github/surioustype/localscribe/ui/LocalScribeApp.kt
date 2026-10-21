@@ -11,6 +11,7 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -1465,6 +1466,10 @@ private fun TranscriptScreen(
             visibleSegments.filter { it.text.contains(query, ignoreCase = true) }
         }
     val transcriptListState = rememberLazyListState()
+    val isManuallyDragging by transcriptListState.interactionSource.collectIsDraggedAsState()
+    LaunchedEffect(isManuallyDragging) {
+        if (isManuallyDragging) followPlayback = false
+    }
     LaunchedEffect(activeSegmentId, followPlayback, query, visibleSegments) {
         if (followPlayback && query.isBlank() && activeSegmentId != null) {
             val index = visibleSegments.indexOfFirst { it.id == activeSegmentId }
