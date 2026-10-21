@@ -18,6 +18,9 @@ class LocalScribeUiStateViewModel(
                 destination = state[DESTINATION] ?: "HOME",
                 selectedSourceId = state[SELECTED_SOURCE],
                 transcriptJobId = state[TRANSCRIPT_JOB],
+                processingVisible = state[PROCESSING_VISIBLE] ?: false,
+                libraryQuery = state[LIBRARY_QUERY] ?: "",
+                transcriptSeekToMs = state[TRANSCRIPT_SEEK],
                 transcriptQuery = state[TRANSCRIPT_QUERY] ?: "",
                 exportFormat = state[EXPORT_FORMAT],
                 statusMessage = state[STATUS_MESSAGE],
@@ -34,11 +37,34 @@ class LocalScribeUiStateViewModel(
         )
     val uiState: StateFlow<LocalScribeUiState> = mutable.asStateFlow()
 
-    fun selectDestination(value: String) = update { it.copy(destination = value) }
+    fun selectDestination(value: String) =
+        update { it.copy(destination = value, processingVisible = false) }
+
+    fun showProcessing(visible: Boolean) = update { it.copy(processingVisible = visible) }
+
+    fun setLibraryQuery(query: String) = update { it.copy(libraryQuery = query) }
+
+    fun openTranscriptAt(jobId: String, startMs: Long, query: String) =
+        update {
+            it.copy(
+                transcriptJobId = jobId,
+                selectedSourceId = null,
+                transcriptSeekToMs = startMs,
+                transcriptQuery = query,
+            )
+        }
 
     fun selectSource(value: String?) = update { it.copy(selectedSourceId = value) }
 
-    fun showTranscript(value: String?) = update { it.copy(transcriptJobId = value) }
+    fun showTranscript(value: String?) =
+        update {
+            it.copy(
+                transcriptJobId = value,
+                selectedSourceId = if (value != null) null else it.selectedSourceId,
+                transcriptSeekToMs = null,
+                transcriptQuery = if (value != null) "" else it.transcriptQuery,
+            )
+        }
 
     fun setTranscriptQuery(value: String) = update { it.copy(transcriptQuery = value) }
 
@@ -95,6 +121,9 @@ class LocalScribeUiStateViewModel(
         state[DESTINATION] = next.destination
         state[SELECTED_SOURCE] = next.selectedSourceId
         state[TRANSCRIPT_JOB] = next.transcriptJobId
+        state[PROCESSING_VISIBLE] = next.processingVisible
+        state[LIBRARY_QUERY] = next.libraryQuery
+        state[TRANSCRIPT_SEEK] = next.transcriptSeekToMs
         state[TRANSCRIPT_QUERY] = next.transcriptQuery
         state[EXPORT_FORMAT] = next.exportFormat
         state[STATUS_MESSAGE] = next.statusMessage
@@ -128,6 +157,9 @@ class LocalScribeUiStateViewModel(
         const val DESTINATION = "destination"
         const val SELECTED_SOURCE = "selected_source"
         const val TRANSCRIPT_JOB = "transcript_job"
+        const val PROCESSING_VISIBLE = "processing_visible"
+        const val LIBRARY_QUERY = "library_query"
+        const val TRANSCRIPT_SEEK = "transcript_seek"
         const val TRANSCRIPT_QUERY = "transcript_query"
         const val EXPORT_FORMAT = "export_format"
         const val STATUS_MESSAGE = "status_message"
@@ -151,6 +183,9 @@ data class LocalScribeUiState(
     val destination: String,
     val selectedSourceId: String?,
     val transcriptJobId: String?,
+    val processingVisible: Boolean,
+    val libraryQuery: String,
+    val transcriptSeekToMs: Long?,
     val transcriptQuery: String,
     val exportFormat: String?,
     val statusMessage: String?,

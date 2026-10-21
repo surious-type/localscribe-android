@@ -4,6 +4,12 @@ import android.content.Context
 
 class AppPreferences(context: Context) {
     private val values = context.getSharedPreferences("ui_preferences", Context.MODE_PRIVATE)
+    var libraryFilter: String
+        get() = values.getString("library_filter", "all") ?: "all"
+        set(value) = values.edit().putString("library_filter", value).apply()
+    var librarySort: String
+        get() = values.getString("library_sort", "added") ?: "added"
+        set(value) = values.edit().putString("library_sort", value).apply()
     var onboardingComplete: Boolean
         get() = values.getBoolean("onboarding_complete", false)
         set(value) = values.edit().putBoolean("onboarding_complete", value).apply()
