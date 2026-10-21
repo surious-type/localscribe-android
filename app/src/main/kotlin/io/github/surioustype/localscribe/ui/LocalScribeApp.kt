@@ -75,9 +75,9 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -1437,8 +1437,7 @@ private fun TranscriptScreen(
                             correctedSegments,
                             format,
                         )
-                    }
-                        .onSuccess { completeExport(true) }
+                    }.onSuccess { completeExport(true) }
                         .onFailure { completeExport(false) }
                 }
             } else {
@@ -1463,7 +1462,8 @@ private fun TranscriptScreen(
     LaunchedEffect(player, jobId) {
         var lastPosition = -1L
         player.state.collect { current ->
-            if (current.sourceUri != null &&
+            if (
+                current.sourceUri != null &&
                 (kotlin.math.abs(current.positionMs - lastPosition) >= 2_000L ||
                     !current.isPlaying)
             ) {
@@ -1478,7 +1478,8 @@ private fun TranscriptScreen(
         }
     val transcriptListState = rememberLazyListState()
     val versionHeader =
-        if (versions.size > 1 ||
+        if (
+            versions.size > 1 ||
             (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)
         ) {
             1
@@ -1494,8 +1495,8 @@ private fun TranscriptScreen(
     LaunchedEffect(transcriptListState) {
         snapshotFlow { transcriptListState.isScrollInProgress }
             .collect { isScrolling ->
-            if (isScrolling && !programmaticScroll) followPlayback = false
-        }
+                if (isScrolling && !programmaticScroll) followPlayback = false
+            }
     }
     LaunchedEffect(activeIndex, followPlayback, playback.isPlaying, transcriptRowOffset) {
         if (followPlayback && activeIndex != null) {
@@ -1535,7 +1536,9 @@ private fun TranscriptScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             // A running rerun still lets the user open an earlier completed transcript.
-            if (versions.size > 1 || (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)) {
+            if (versions.size > 1 ||
+                (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)
+            ) {
                 item {
                     Box {
                         OutlinedButton(onClick = { showVersions = true }) {
@@ -1624,7 +1627,10 @@ private fun TranscriptScreen(
                         enabled = correctedSegments.isNotEmpty(),
                         onClick = { showExport = true },
                     ) {
-                        Icon(Icons.Default.FileDownload, contentDescription = "Экспортировать текст")
+                        Icon(
+                            Icons.Default.FileDownload,
+                            contentDescription = "Экспортировать текст",
+                        )
                     }
                 }
             }
@@ -1722,9 +1728,10 @@ private fun TranscriptScreen(
                                     editError = null
                                     editText = corrected?.editedText ?: original.text
                                 },
-                                modifier = Modifier.semantics {
-                                    contentDescription = "Редактировать фрагмент"
-                                },
+                                modifier =
+                                    Modifier.semantics {
+                                        contentDescription = "Редактировать фрагмент"
+                                    },
                             ) {
                                 Text("Редактировать")
                             }
@@ -1765,9 +1772,10 @@ private fun TranscriptScreen(
                         sourceUri?.let { player.seekTo(it, position.toLong()) }
                     },
                     valueRange = 0f..playback.durationMs.coerceAtLeast(1L).toFloat(),
-                    modifier = Modifier.fillMaxWidth().semantics {
-                        contentDescription = "Позиция воспроизведения"
-                    },
+                    modifier =
+                        Modifier.fillMaxWidth().semantics {
+                            contentDescription = "Позиция воспроизведения"
+                        },
                 )
                 Text(
                     formatAudioDuration(playback.positionMs) + " / " +
@@ -1795,8 +1803,13 @@ private fun TranscriptScreen(
                         }
                     }) {
                         Icon(
-                            if (playback.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                            contentDescription = if (playback.isPlaying) "Пауза" else "Воспроизвести",
+                            if (playback.isPlaying) {
+                                Icons.Default.Pause
+                            } else {
+                                Icons.Default.PlayArrow
+                            },
+                            contentDescription =
+                                if (playback.isPlaying) "Пауза" else "Воспроизвести",
                         )
                     }
                     TextButton(
