@@ -1403,6 +1403,7 @@ private fun TranscriptScreen(
     val playback by player.state.collectAsStateWithLifecycle()
     var editTarget by remember { mutableStateOf<io.github.surioustype.localscribe.core.model.TranscriptSegment?>(null) }
     var editText by rememberSaveable { mutableStateOf("") }
+    var editError by remember { mutableStateOf<String?>(null) }
     var followPlayback by rememberSaveable { mutableStateOf(true) }
     var programmaticScroll by remember { mutableStateOf(false) }
     var showSpeedMenu by remember { mutableStateOf(false) }
@@ -1482,7 +1483,7 @@ private fun TranscriptScreen(
         }
     }
     LaunchedEffect(activeIndex, followPlayback, playback.isPlaying, transcriptRowOffset) {
-        if (followPlayback && playback.isPlaying && activeIndex != null) {
+        if (followPlayback && activeIndex != null) {
             programmaticScroll = true
             try {
                 transcriptListState.animateScrollToItem(activeIndex + transcriptRowOffset)
@@ -1698,6 +1699,7 @@ private fun TranscriptScreen(
                         TextButton(
                             onClick = {
                                 editTarget = original
+                                editError = null
                                 editText = corrected?.editedText ?: original.text
                             },
                             modifier = Modifier.semantics {
@@ -1719,7 +1721,7 @@ private fun TranscriptScreen(
         }
         item { Spacer(Modifier.height(16.dp)) }
     }
-    if (!followPlayback && playback.isPlaying) {
+    if (!followPlayback) {
         TextButton(
             onClick = { followPlayback = true },
             modifier = Modifier.fillMaxWidth(),
@@ -1743,16 +1745,16 @@ private fun TranscriptScreen(
                     contentDescription = "Позиция воспроизведения"
                 },
             )
+            Text(
+                formatAudioDuration(playback.positionMs) + " / " +
+                    formatAudioDuration(playback.durationMs),
+                style = MaterialTheme.typography.labelSmall,
+            )
             Row(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text(
-                    formatAudioDuration(playback.positionMs) + " / " +
-                        formatAudioDuration(playback.durationMs),
-                    style = MaterialTheme.typography.labelSmall,
-                )
                 TextButton(
                     onClick = {
                         sourceUri?.let {
@@ -1832,13 +1834,16 @@ private fun TranscriptScreen(
                         minLines = 3,
                         maxLines = 9,
                     )
+                    editError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                    }
                     if (correction != null) {
                         Text("Оригинал: " + original.text, style = MaterialTheme.typography.bodySmall)
                         TextButton(onClick = {
                             scope.launch {
                                 runCatching { graph.transcriptCorrections.restore(jobId, original.id) }
                                     .onSuccess { editTarget = null }
-                                    .onFailure { setStatus("Не удалось восстановить исходный текст") }
+                                    .onFailure { editError = "Не удалось восстановить исходный текст" }
                             }
                         }) { Text("Восстановить оригинал") }
                     }
@@ -1854,7 +1859,7 @@ private fun TranscriptScreen(
                             }.onSuccess {
                                 editTarget = null
                             }.onFailure {
-                                setStatus("Не удалось сохранить исправление")
+                                editError = "Не удалось сохранить исправление"
                             }
                         }
                     },
