@@ -20,12 +20,11 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
-import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
@@ -57,8 +56,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -91,12 +90,12 @@ import io.github.surioustype.localscribe.core.domain.ChunkPlanner
 import io.github.surioustype.localscribe.core.domain.RecommendationEngine
 import io.github.surioustype.localscribe.core.domain.TranscriptAssembler
 import io.github.surioustype.localscribe.core.model.AppVersion
+import io.github.surioustype.localscribe.core.model.AudioSourceRecord
 import io.github.surioustype.localscribe.core.model.BenchmarkRecord
 import io.github.surioustype.localscribe.core.model.ExportFormat
 import io.github.surioustype.localscribe.core.model.InferenceConfig
 import io.github.surioustype.localscribe.core.model.InstalledModel
 import io.github.surioustype.localscribe.core.model.JobStatus
-import io.github.surioustype.localscribe.core.model.AudioSourceRecord
 import io.github.surioustype.localscribe.core.model.ModelKind
 import io.github.surioustype.localscribe.core.model.TranscriptionConfig
 import io.github.surioustype.localscribe.core.model.TranscriptionJob
@@ -169,12 +168,18 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                 Destination.valueOf(savedUi.destination)
             }.getOrDefault(Destination.HOME)
         val processing = savedUi.processingVisible
-        val detail = savedUi.transcriptJobId != null || savedUi.selectedSourceId != null || processing
-        val backgroundJobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
-        val activeJob = backgroundJobs.firstOrNull { it.status == JobStatus.RUNNING }
-            ?: backgroundJobs.firstOrNull {
-                it.status == JobStatus.PENDING || it.status == JobStatus.PAUSED
-            }
+        val detail =
+            savedUi.transcriptJobId != null || savedUi.selectedSourceId != null || processing
+        val backgroundJobs by graph.transcriptionRepository
+            .observeJobs()
+            .collectAsStateWithLifecycle(
+                emptyList(),
+            )
+        val activeJob =
+            backgroundJobs.firstOrNull { it.status == JobStatus.RUNNING }
+                ?: backgroundJobs.firstOrNull {
+                    it.status == JobStatus.PENDING || it.status == JobStatus.PAUSED
+                }
         val title =
             when {
                 savedUi.transcriptJobId != null -> "Транскрипция"
@@ -213,11 +218,15 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                     Column {
                         if (activeJob != null) {
                             Card(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 12.dp, vertical = 4.dp)
-                                    .clickable { uiModel.showProcessing(true) }
-                                    .semantics { contentDescription = "Открыть очередь обработки" },
+                                modifier =
+                                    Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                                        .clickable { uiModel.showProcessing(true) }
+                                        .semantics {
+                                            contentDescription =
+                                                "Открыть очередь обработки"
+                                        },
                                 colors = localScribeCardColors(),
                                 shape = localScribeShape,
                             ) {
@@ -237,28 +246,28 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                                 }
                             }
                         }
-                    NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
-                        Destination.entries.forEach { item ->
-                            val icon =
-                                when (item) {
-                                    Destination.HOME -> Icons.Default.Home
-                                    Destination.MODELS -> Icons.Default.Folder
-                                    Destination.SETTINGS -> Icons.Default.Settings
-                                }
-                            val label =
-                                when (item) {
-                                    Destination.HOME -> "Записи"
-                                    Destination.MODELS -> "Модели"
-                                    Destination.SETTINGS -> "Настройки"
-                                }
-                            NavigationBarItem(
-                                selected = destination == item,
-                                onClick = { uiModel.selectDestination(item.name) },
-                                icon = { Icon(icon, contentDescription = label) },
-                                label = { Text(label) },
-                            )
+                        NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
+                            Destination.entries.forEach { item ->
+                                val icon =
+                                    when (item) {
+                                        Destination.HOME -> Icons.Default.Home
+                                        Destination.MODELS -> Icons.Default.Folder
+                                        Destination.SETTINGS -> Icons.Default.Settings
+                                    }
+                                val label =
+                                    when (item) {
+                                        Destination.HOME -> "Записи"
+                                        Destination.MODELS -> "Модели"
+                                        Destination.SETTINGS -> "Настройки"
+                                    }
+                                NavigationBarItem(
+                                    selected = destination == item,
+                                    onClick = { uiModel.selectDestination(item.name) },
+                                    icon = { Icon(icon, contentDescription = label) },
+                                    label = { Text(label) },
+                                )
+                            }
                         }
-                    }
                     }
                 }
             },
@@ -384,7 +393,9 @@ private fun Home(
             if (granted) {
                 scope.launch { graph.audioRepository.refresh() }
             } else {
-                uiModel.setStatusMessage("Доступ к библиотеке не предоставлен. Импорт файлов доступен.")
+                uiModel.setStatusMessage(
+                    "Доступ к библиотеке не предоставлен. Импорт файлов доступен.",
+                )
             }
         }
     LaunchedEffect(receivedUri) {
@@ -395,33 +406,39 @@ private fun Home(
         }
         graph.audioRepository.refresh()
     }
-    val filteredSources = sources.filter { record ->
-        val ready = jobs.any {
-            it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
+    val filteredSources =
+        sources.filter { record ->
+            val ready =
+                jobs.any {
+                    it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
+                }
+            val active =
+                jobs.any {
+                    it.sourceId == record.source.id &&
+                        it.status in setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
+                }
+            when (filter) {
+                "ready" -> ready
+                "new" -> !ready && !active
+                "active" -> active
+                else -> true
+            }
         }
-        val active = jobs.any {
-            it.sourceId == record.source.id &&
-                it.status in setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
-        }
-        when (filter) {
-            "ready" -> ready
-            "new" -> !ready && !active
-            "active" -> active
-            else -> true
-        }
-    }
     val ordered = remember(filteredSources, sort) { sortLibrary(filteredSources, sort) }
-    val hits = remember(ordered, searchSegments, query) {
-        searchLibrary(ordered, searchSegments, query)
-    }
+    val hits =
+        remember(ordered, searchSegments, query) {
+            searchLibrary(ordered, searchSegments, query)
+        }
     val openRecord: (AudioSourceRecord) -> Unit = { record ->
         val completed =
-            jobs.filter { it.sourceId == record.source.id && it.status == JobStatus.COMPLETED }
+            jobs
+                .filter { it.sourceId == record.source.id && it.status == JobStatus.COMPLETED }
                 .maxByOrNull { it.createdAtEpochMs }
-        val active = jobs.any {
-            it.sourceId == record.source.id &&
-                it.status in setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
-        }
+        val active =
+            jobs.any {
+                it.sourceId == record.source.id &&
+                    it.status in setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
+            }
         when {
             completed != null -> uiModel.showTranscript(completed.id)
             active -> uiModel.showProcessing(true)
@@ -455,8 +472,12 @@ private fun Home(
         item {
             LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 items(
-                    listOf("all" to "Все", "ready" to "С текстом",
-                        "new" to "Без текста", "active" to "В обработке"),
+                    listOf(
+                        "all" to "Все",
+                        "ready" to "С текстом",
+                        "new" to "Без текста",
+                        "active" to "В обработке",
+                    ),
                 ) { (key, label) ->
                     FilterChip(
                         selected = filter == key,
@@ -526,13 +547,14 @@ private fun Home(
             }
             items(hits) { hit ->
                 Card(
-                    modifier = Modifier.fillMaxWidth().clickable {
-                        if (hit.jobId != null && hit.startMs != null) {
-                            uiModel.openTranscriptAt(hit.jobId, hit.startMs, query)
-                        } else {
-                            openRecord(hit.record)
-                        }
-                    },
+                    modifier =
+                        Modifier.fillMaxWidth().clickable {
+                            if (hit.jobId != null && hit.startMs != null) {
+                                uiModel.openTranscriptAt(hit.jobId, hit.startMs, query)
+                            } else {
+                                openRecord(hit.record)
+                            }
+                        },
                     colors = localScribeCardColors(),
                     shape = localScribeShape,
                 ) {
@@ -548,7 +570,10 @@ private fun Home(
                                 style = MaterialTheme.typography.labelMedium,
                             )
                         } else {
-                            Text("Совпадение в названии", style = MaterialTheme.typography.labelMedium)
+                            Text(
+                                "Совпадение в названии",
+                                style = MaterialTheme.typography.labelMedium,
+                            )
                         }
                         hit.snippet?.let { Text(it, maxLines = 3) }
                     }
@@ -568,23 +593,29 @@ private fun Home(
                 }
             }
             items(ordered, key = { it.source.id }) { record ->
-                val latest = jobs.filter { it.sourceId == record.source.id }
-                    .maxByOrNull { it.createdAtEpochMs }
-                val completed = jobs.any {
-                    it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
-                }
-                val active = jobs.any {
-                    it.sourceId == record.source.id &&
-                        it.status in setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
-                }
-                val label = when {
-                    record.accessStatus.name != "AVAILABLE" ->
-                        localizedSourceStatus(record.accessStatus.name)
-                    active -> localizedJobStatus(latest?.status?.name ?: "PENDING")
-                    completed -> "Расшифровка готова"
-                    latest?.status == JobStatus.FAILED -> "Ошибка обработки"
-                    else -> "Без расшифровки"
-                }
+                val latest =
+                    jobs
+                        .filter { it.sourceId == record.source.id }
+                        .maxByOrNull { it.createdAtEpochMs }
+                val completed =
+                    jobs.any {
+                        it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
+                    }
+                val active =
+                    jobs.any {
+                        it.sourceId == record.source.id &&
+                            it.status in
+                            setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
+                    }
+                val label =
+                    when {
+                        record.accessStatus.name != "AVAILABLE" ->
+                            localizedSourceStatus(record.accessStatus.name)
+                        active -> localizedJobStatus(latest?.status?.name ?: "PENDING")
+                        completed -> "Расшифровка готова"
+                        latest?.status == JobStatus.FAILED -> "Ошибка обработки"
+                        else -> "Без расшифровки"
+                    }
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = localScribeCardColors(),
@@ -601,7 +632,8 @@ private fun Home(
                             modifier = Modifier.padding(top = 12.dp),
                         )
                         Column(
-                            Modifier.weight(1f)
+                            Modifier
+                                .weight(1f)
                                 .clickable { openRecord(record) }
                                 .padding(vertical = 8.dp),
                             verticalArrangement = Arrangement.spacedBy(5.dp),
@@ -1286,9 +1318,10 @@ private fun TranscriptScreen(
     val transcriptListState = rememberLazyListState()
     LaunchedEffect(seekToMs, filtered) {
         if (seekToMs != null && filtered.isNotEmpty()) {
-            val nearest = filtered.indices.minByOrNull {
-                kotlin.math.abs(filtered[it].absoluteStartMs - seekToMs)
-            } ?: 0
+            val nearest =
+                filtered.indices.minByOrNull {
+                    kotlin.math.abs(filtered[it].absoluteStartMs - seekToMs)
+                } ?: 0
             transcriptListState.scrollToItem(nearest + 3)
         }
     }

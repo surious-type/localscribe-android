@@ -35,8 +35,13 @@ abstract class LocalScribeDatabase : RoomDatabase() {
                     context.applicationContext,
                     LocalScribeDatabase::class.java,
                     "localscribe.db",
-                ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
-                .build()
+                ).addMigrations(
+                    MIGRATION_1_2,
+                    MIGRATION_2_3,
+                    MIGRATION_3_4,
+                    MIGRATION_4_5,
+                    MIGRATION_5_6,
+                ).build()
 
         val MIGRATION_1_2 =
             object : Migration(1, 2) {

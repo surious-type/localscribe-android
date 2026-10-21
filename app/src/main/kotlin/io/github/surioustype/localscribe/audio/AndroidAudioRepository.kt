@@ -69,10 +69,19 @@ class AndroidAudioRepository(
                 "Название должно содержать от 1 до 120 символов"
             }
             sourceOperationMutex.withLock {
-                val record = store.get(sourceId)
-                    ?: mediaSources.value.firstOrNull { it.source.id == sourceId }
-                    ?: throw IllegalArgumentException("Запись не найдена")
-                store.upsert(record.copy(customTitle = title.takeUnless { it == record.source.displayName }))
+                val record =
+                    store.get(sourceId)
+                        ?: mediaSources.value.firstOrNull { it.source.id == sourceId }
+                        ?: throw IllegalArgumentException("Запись не найдена")
+                store.upsert(
+                    record.copy(
+                        customTitle =
+                            title.takeUnless {
+                                it ==
+                                    record.source.displayName
+                            },
+                    ),
+                )
             }
         }
 
@@ -367,7 +376,10 @@ class AndroidAudioRepository(
                             MediaStore.Audio.Media.DURATION,
                         )
                     val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
-                    val addedColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
+                    val addedColumn =
+                        cursor.getColumnIndexOrThrow(
+                            MediaStore.Audio.Media.DATE_ADDED,
+                        )
                     buildList {
                         while (cursor.moveToNext()) {
                             val id = cursor.getLong(idColumn)
@@ -391,8 +403,11 @@ class AndroidAudioRepository(
                                     ),
                                     SourceAccessStatus.AVAILABLE,
                                     hasPersistedPermission = false,
-                                    addedAtEpochMs = cursor.getLong(addedColumn)
-                                        .takeIf { it > 0L }?.times(1_000L),
+                                    addedAtEpochMs =
+                                        cursor
+                                            .getLong(addedColumn)
+                                            .takeIf { it > 0L }
+                                            ?.times(1_000L),
                                 ),
                             )
                         }

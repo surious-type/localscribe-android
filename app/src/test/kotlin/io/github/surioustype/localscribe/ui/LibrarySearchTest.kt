@@ -12,9 +12,16 @@ class LibrarySearchTest {
     @Test
     fun cyrillicSearchIgnoresCaseAndOpensExactTime() {
         val source = source("audio", "Лекция по математике")
-        val rows = listOf(
-            TranscriptSearchRow("job", "audio", "segment", 28_000L, "Сегодня изучаем МЕТОД Ньютона."),
-        )
+        val rows =
+            listOf(
+                TranscriptSearchRow(
+                    "job",
+                    "audio",
+                    "segment",
+                    28_000L,
+                    "Сегодня изучаем МЕТОД Ньютона.",
+                ),
+            )
         val results = searchLibrary(listOf(source), rows, "метод")
         assertEquals(1, results.size)
         assertEquals("job", results.single().jobId)
@@ -32,9 +39,10 @@ class LibrarySearchTest {
 
     @Test
     fun unrelatedSourcesAreNotExposedInSearchResults() {
-        val rows = listOf(
-            TranscriptSearchRow("old", "missing", "segment", 0L, "тайная заметка"),
-        )
+        val rows =
+            listOf(
+                TranscriptSearchRow("old", "missing", "segment", 0L, "тайная заметка"),
+            )
         assertTrue(searchLibrary(listOf(source("one", "Другая")), rows, "заметка").isEmpty())
     }
 
@@ -42,17 +50,19 @@ class LibrarySearchTest {
     fun sortUsesActualDatesAndKeepsUnknownAtEnd() {
         val unknown = source("old", "Неизвестно")
         val imported = source("new", "Импорт").copy(addedAtEpochMs = 30L)
-        val recorded = source("recorded", "Запись").copy(
-            recordedAtEpochMs = 20L,
-            addedAtEpochMs = 10L,
-        )
+        val recorded =
+            source("recorded", "Запись").copy(
+                recordedAtEpochMs = 20L,
+                addedAtEpochMs = 10L,
+            )
         assertEquals(
             listOf("new", "recorded", "old"),
             sortLibrary(listOf(recorded, unknown, imported), "added").map { it.source.id },
         )
         assertEquals(
             listOf("recorded", "new", "old"),
-            sortLibrary(listOf(recorded, unknown, imported), "recorded").map { it.source.id }
+            sortLibrary(listOf(recorded, unknown, imported), "recorded")
+                .map { it.source.id }
                 .let { listOf(it[0], it[1], it[2]) },
         )
     }
