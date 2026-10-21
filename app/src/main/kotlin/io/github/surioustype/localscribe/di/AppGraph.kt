@@ -40,6 +40,7 @@ class AppGraph(context: Context) {
     private var recovered = false
     val database = LocalScribeDatabase.open(appContext)
     val transcriptionRepository = RoomTranscriptionRepository(database)
+    val transcriptSearch = database.transcriptionDao().observeSearchSegments()
     private val sourceStore = RoomAudioSourceStore(database)
     val installedModels = RoomInstalledModelRepository(database)
     private val benchmarkStore = RoomBenchmarkStore(database)

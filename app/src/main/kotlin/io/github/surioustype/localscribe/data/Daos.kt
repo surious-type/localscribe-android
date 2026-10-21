@@ -31,8 +31,28 @@ interface AudioSourceDao {
     suspend fun delete(sourceId: String): Int
 }
 
+/** Local search index of committed transcript segments. */
+data class TranscriptSearchRow(
+    val jobId: String,
+    val sourceId: String,
+    val segmentId: String,
+    val startMs: Long,
+    val text: String,
+)
+
 @Dao
 interface TranscriptionDao {
+    @Query(
+        "SELECT j.id AS jobId, j.sourceId AS sourceId, s.id AS segmentId, " +
+            "s.absoluteStartMs AS startMs, s.text AS text " +
+            "FROM transcript_segments s " +
+            "INNER JOIN transcription_chunks c ON c.id = s.chunkId " +
+            "INNER JOIN transcription_jobs j ON j.id = c.jobId " +
+            "WHERE c.status = 'COMPLETED' " +
+            "ORDER BY j.createdAtEpochMs DESC, s.absoluteStartMs, s.id",
+    )
+    fun observeSearchSegments(): Flow<List<TranscriptSearchRow>>
+
     @Query("SELECT * FROM transcription_jobs ORDER BY createdAtEpochMs DESC, id")
     fun observeJobs(): Flow<List<TranscriptionJobEntity>>
 

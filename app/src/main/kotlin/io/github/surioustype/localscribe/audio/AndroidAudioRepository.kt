@@ -56,12 +56,24 @@ class AndroidAudioRepository(
             (imported + media)
                 .distinctBy { it.source.id }
                 .sortedWith(
-                    compareByDescending<AudioSourceRecord> { record ->
-                        record.source.id
-                            .removePrefix("media:")
-                            .toLongOrNull() ?: Long.MIN_VALUE
-                    }.thenBy { it.source.displayName.lowercase() },
+                    compareByDescending<AudioSourceRecord> { it.addedAtEpochMs ?: Long.MIN_VALUE }
+                        .thenBy { it.customTitle ?: it.source.displayName },
                 )
+        }
+
+    /** Local display alias only: never modifies source media or its fingerprint. */
+    suspend fun renameSource(sourceId: String, newTitle: String) =
+        withContext(ioDispatcher) {
+            val title = newTitle.trim()
+            require(title.isNotEmpty() && title.length <= 120) {
+                "Название должно содержать от 1 до 120 символов"
+            }
+            sourceOperationMutex.withLock {
+                val record = store.get(sourceId)
+                    ?: mediaSources.value.firstOrNull { it.source.id == sourceId }
+                    ?: throw IllegalArgumentException("Запись не найдена")
+                store.upsert(record.copy(customTitle = title.takeUnless { it == record.source.displayName }))
+            }
         }
 
     override suspend fun refresh() =
@@ -173,6 +185,8 @@ class AndroidAudioRepository(
                             accessStatus = SourceAccessStatus.AVAILABLE,
                             hasPersistedPermission = persisted,
                             contentFingerprint = durable.fingerprint,
+                            recordedAtEpochMs = metadata.recordedAtEpochMs,
+                            addedAtEpochMs = System.currentTimeMillis(),
                         )
                     currentCoroutineContext().ensureActive()
                     withContext(NonCancellable) {
@@ -332,6 +346,7 @@ class AndroidAudioRepository(
                 MediaStore.Audio.Media.DISPLAY_NAME,
                 MediaStore.Audio.Media.DURATION,
                 MediaStore.Audio.Media.MIME_TYPE,
+                MediaStore.Audio.Media.DATE_ADDED,
             )
         return try {
             resolver
@@ -352,6 +367,7 @@ class AndroidAudioRepository(
                             MediaStore.Audio.Media.DURATION,
                         )
                     val mimeColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.MIME_TYPE)
+                    val addedColumn = cursor.getColumnIndexOrThrow(MediaStore.Audio.Media.DATE_ADDED)
                     buildList {
                         while (cursor.moveToNext()) {
                             val id = cursor.getLong(idColumn)
@@ -375,6 +391,8 @@ class AndroidAudioRepository(
                                     ),
                                     SourceAccessStatus.AVAILABLE,
                                     hasPersistedPermission = false,
+                                    addedAtEpochMs = cursor.getLong(addedColumn)
+                                        .takeIf { it > 0L }?.times(1_000L),
                                 ),
                             )
                         }
@@ -414,10 +432,15 @@ class AndroidAudioRepository(
                 .getMimeTypeFromExtension(name.substringAfterLast('.', "")) ?: mime
         }
         val retriever = MediaMetadataRetriever()
+        var recordedAtEpochMs: Long? = null
         val duration =
             try {
                 try {
                     retriever.setDataSource(applicationContext, uri)
+                    recordedAtEpochMs =
+                        parseRecordingDate(
+                            retriever.extractMetadata(MediaMetadataRetriever.METADATA_KEY_DATE),
+                        )
                     retriever
                         .extractMetadata(
                             MediaMetadataRetriever.METADATA_KEY_DURATION,
@@ -440,7 +463,18 @@ class AndroidAudioRepository(
             duration.coerceAtLeast(0),
             mime,
             name.substringAfterLast('.', "bin"),
+            recordedAtEpochMs,
         )
+    }
+
+    private fun parseRecordingDate(raw: String?): Long? {
+        if (raw.isNullOrBlank()) return null
+        return runCatching {
+            val date = java.text.SimpleDateFormat("yyyyMMdd'T'HHmmss.SSS'Z'", java.util.Locale.ROOT)
+            date.timeZone = java.util.TimeZone.getTimeZone("UTC")
+            date.isLenient = false
+            date.parse(raw)?.time
+        }.getOrNull()
     }
 
     private fun tryPersistPermission(uri: Uri): Boolean =
@@ -570,6 +604,7 @@ class AndroidAudioRepository(
         val durationMs: Long,
         val mimeType: String,
         val extension: String,
+        val recordedAtEpochMs: Long?,
     )
 
     private data class DurableSource(
