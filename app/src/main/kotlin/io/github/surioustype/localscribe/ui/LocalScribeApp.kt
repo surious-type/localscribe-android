@@ -23,6 +23,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -354,141 +355,93 @@ private fun Home(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val preferences = remember { AppPreferences(context) }
     val sources by graph.audioRepository.observeSources().collectAsStateWithLifecycle(emptyList())
     val jobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
-    val models by graph.installedModels.observeInstalledModels().collectAsStateWithLifecycle(
-        emptyList(),
-    )
+    val searchSegments by graph.transcriptSearch.collectAsStateWithLifecycle(emptyList())
+    var filter by remember { mutableStateOf(preferences.libraryFilter) }
+    var sort by remember { mutableStateOf(preferences.librarySort) }
+    var renameTarget by remember { mutableStateOf<AudioSourceRecord?>(null) }
+    var renameText by remember { mutableStateOf("") }
+    val query = savedUi.libraryQuery
     val picker =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let {
                 scope.launch {
                     runCatching { graph.audioRepository.importSource(it.toString(), true) }
-                        .onSuccess { uiModel.setStatusMessage("Audio imported") }
-                        .onFailure {
-                            uiModel.setStatusMessage(
-                                "Could not import this audio source",
-                            )
-                        }
+                        .onSuccess { uiModel.setStatusMessage("Запись добавлена") }
+                        .onFailure { uiModel.setStatusMessage("Не удалось импортировать аудио") }
                 }
             }
         }
     val mediaPermission =
-        if (Build.VERSION.SDK_INT >=
-            33
-        ) {
+        if (Build.VERSION.SDK_INT >= 33) {
             Manifest.permission.READ_MEDIA_AUDIO
         } else {
             Manifest.permission.READ_EXTERNAL_STORAGE
         }
     val permission =
-        rememberLauncherForActivityResult(
-            ActivityResultContracts.RequestPermission(),
-        ) { granted ->
+        rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             if (granted) {
-                scope.launch {
-                    graph.audioRepository.refresh()
-                }
+                scope.launch { graph.audioRepository.refresh() }
+            } else {
+                uiModel.setStatusMessage("Доступ к библиотеке не предоставлен. Импорт файлов доступен.")
             }
         }
     LaunchedEffect(receivedUri) {
         if (receivedUri != null && uiModel.consumeInboundAudio(receivedUri)) {
             runCatching { graph.audioRepository.importSource(receivedUri, true) }
-                .onSuccess { uiModel.setStatusMessage("Shared audio imported") }
-                .onFailure { uiModel.setStatusMessage("Could not import shared audio") }
+                .onSuccess { uiModel.setStatusMessage("Полученная запись добавлена") }
+                .onFailure { uiModel.setStatusMessage("Не удалось добавить полученное аудио") }
         }
-        ; graph.audioRepository.refresh()
+        graph.audioRepository.refresh()
     }
-    var query by remember { mutableStateOf("") }
-    var filter by remember { mutableStateOf("all") }
-    var sort by remember { mutableStateOf("new") }
-    val visible =
-        sources
-            .filter { item ->
-                item.source.displayName.contains(query, ignoreCase = true) &&
-                    when (filter) {
-                        "ready" ->
-                            jobs.any {
-                                it.sourceId == item.source.id && it.status == JobStatus.COMPLETED
-                            }
-                        "new" ->
-                            jobs.none {
-                                it.sourceId == item.source.id && it.status == JobStatus.COMPLETED
-                            }
-                        else -> true
-                    }
-            }.let { items ->
-                when (sort) {
-                    "az" -> items.sortedBy { it.source.displayName.lowercase() }
-                    "za" -> items.sortedByDescending { it.source.displayName.lowercase() }
-                    "long" -> items.sortedByDescending { it.source.durationMs }
-                    "short" -> items.sortedBy { it.source.durationMs }
-                    else -> items
-                }
-            }
+    val filteredSources = sources.filter { record ->
+        val ready = jobs.any {
+            it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
+        }
+        val active = jobs.any {
+            it.sourceId == record.source.id &&
+                it.status in setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
+        }
+        when (filter) {
+            "ready" -> ready
+            "new" -> !ready && !active
+            "active" -> active
+            else -> true
+        }
+    }
+    val ordered = remember(filteredSources, sort) { sortLibrary(filteredSources, sort) }
+    val hits = remember(ordered, searchSegments, query) {
+        searchLibrary(ordered, searchSegments, query)
+    }
+    val openRecord: (AudioSourceRecord) -> Unit = { record ->
+        val completed =
+            jobs.filter { it.sourceId == record.source.id && it.status == JobStatus.COMPLETED }
+                .maxByOrNull { it.createdAtEpochMs }
+        val active = jobs.any {
+            it.sourceId == record.source.id &&
+                it.status in setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
+        }
+        when {
+            completed != null -> uiModel.showTranscript(completed.id)
+            active -> uiModel.showProcessing(true)
+            else -> uiModel.selectSource(record.source.id)
+        }
+    }
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         item {
             Text("Ваши записи", style = MaterialTheme.typography.headlineMedium)
             Spacer(Modifier.height(12.dp))
             OutlinedTextField(
                 value = query,
-                onValueChange = { query = it },
+                onValueChange = uiModel::setLibraryQuery,
                 modifier = Modifier.fillMaxWidth(),
-                placeholder = { Text("Поиск записей…") },
+                placeholder = { Text("Поиск по записям и тексту…") },
                 leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
                 singleLine = true,
                 shape = RoundedCornerShape(18.dp),
             )
-        }
-        item {
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                listOf("all" to "Все", "ready" to "С текстом", "new" to "Без текста")
-                    .forEach { (value, label) ->
-                        FilterChip(
-                            selected = filter == value,
-                            onClick = { filter = value },
-                            label = { Text(label) },
-                        )
-                    }
-            }
-        }
-        item {
-            var menuOpen by remember { mutableStateOf(false) }
-            Box {
-                OutlinedButton(onClick = { menuOpen = true }) {
-                    Icon(Icons.Default.Tune, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text(
-                        when (sort) {
-                            "az" -> "По названию А–Я"
-                            "za" -> "По названию Я–А"
-                            "long" -> "Сначала длинные"
-                            "short" -> "Сначала короткие"
-                            else -> "Сначала новые"
-                        },
-                    )
-                }
-                androidx.compose.material3.DropdownMenu(
-                    expanded = menuOpen,
-                    onDismissRequest = { menuOpen = false },
-                ) {
-                    listOf(
-                        "new" to "Сначала новые",
-                        "az" to "По названию А–Я",
-                        "za" to "По названию Я–А",
-                        "long" to "Сначала длинные",
-                        "short" to "Сначала короткие",
-                    ).forEach { (value, title) ->
-                        androidx.compose.material3.DropdownMenuItem(
-                            text = { Text(title) },
-                            onClick = {
-                                sort = value
-                                menuOpen = false
-                            },
-                        )
-                    }
-                }
-            }
         }
         item {
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -500,56 +453,260 @@ private fun Home(
                 }
             }
         }
-        savedUi.statusMessage?.let { item { Text(it) } }
-        if (visible.isEmpty()) {
-            item {
-                Card(colors = localScribeCardColors(), shape = localScribeShape) {
-                    Text("Нет записей для выбранного фильтра.", Modifier.padding(20.dp))
+        item {
+            LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                items(
+                    listOf("all" to "Все", "ready" to "С текстом",
+                        "new" to "Без текста", "active" to "В обработке"),
+                ) { (key, label) ->
+                    FilterChip(
+                        selected = filter == key,
+                        onClick = {
+                            filter = key
+                            preferences.libraryFilter = key
+                        },
+                        label = { Text(label) },
+                    )
                 }
             }
         }
-        items(visible, key = { it.source.id }) { record ->
-            val ready =
-                jobs.any {
+        item {
+            var menuOpen by remember { mutableStateOf(false) }
+            Box {
+                OutlinedButton(onClick = { menuOpen = true }) {
+                    Icon(Icons.Default.Tune, contentDescription = null)
+                    Text(
+                        when (sort) {
+                            "recorded" -> "По дате записи"
+                            "title" -> "По названию"
+                            "long" -> "Сначала длинные"
+                            "short" -> "Сначала короткие"
+                            else -> "По дате добавления"
+                        },
+                        Modifier.padding(start = 8.dp),
+                    )
+                }
+                androidx.compose.material3.DropdownMenu(
+                    expanded = menuOpen,
+                    onDismissRequest = { menuOpen = false },
+                ) {
+                    listOf(
+                        "added" to "По дате добавления",
+                        "recorded" to "По дате записи",
+                        "title" to "По названию",
+                        "long" to "Сначала длинные",
+                        "short" to "Сначала короткие",
+                    ).forEach { (key, label) ->
+                        androidx.compose.material3.DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                sort = key
+                                preferences.librarySort = key
+                                menuOpen = false
+                            },
+                        )
+                    }
+                }
+            }
+        }
+        savedUi.statusMessage?.let { item { Text(it, color = MaterialTheme.colorScheme.primary) } }
+        if (query.isNotBlank()) {
+            item {
+                Text(
+                    "Результаты поиска: ${hits.size}",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            }
+            if (hits.isEmpty()) {
+                item {
+                    LibraryEmptyState(
+                        "Совпадений нет",
+                        "Проверьте запрос или измените фильтр записей.",
+                    )
+                }
+            }
+            items(hits) { hit ->
+                Card(
+                    modifier = Modifier.fillMaxWidth().clickable {
+                        if (hit.jobId != null && hit.startMs != null) {
+                            uiModel.openTranscriptAt(hit.jobId, hit.startMs, query)
+                        } else {
+                            openRecord(hit.record)
+                        }
+                    },
+                    colors = localScribeCardColors(),
+                    shape = localScribeShape,
+                ) {
+                    Column(
+                        Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(libraryTitle(hit.record), style = MaterialTheme.typography.titleMedium)
+                        if (hit.startMs != null) {
+                            Text(
+                                "В тексте · " + formatAudioDuration(hit.startMs),
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        } else {
+                            Text("Совпадение в названии", style = MaterialTheme.typography.labelMedium)
+                        }
+                        hit.snippet?.let { Text(it, maxLines = 3) }
+                    }
+                }
+            }
+        } else {
+            if (ordered.isEmpty()) {
+                item {
+                    LibraryEmptyState(
+                        if (sources.isEmpty()) "Записей пока нет" else "Нет записей с этим статусом",
+                        if (sources.isEmpty()) {
+                            "Импортируйте аудио или разрешите доступ к записям на устройстве."
+                        } else {
+                            "Попробуйте другой фильтр."
+                        },
+                    )
+                }
+            }
+            items(ordered, key = { it.source.id }) { record ->
+                val latest = jobs.filter { it.sourceId == record.source.id }
+                    .maxByOrNull { it.createdAtEpochMs }
+                val completed = jobs.any {
                     it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
                 }
-            Card(
-                Modifier.fillMaxWidth().clickable { uiModel.selectSource(record.source.id) },
-                colors = localScribeCardColors(),
-                shape = localScribeShape,
-            ) {
-                Row(
-                    Modifier.padding(16.dp),
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                val active = jobs.any {
+                    it.sourceId == record.source.id &&
+                        it.status in setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
+                }
+                val label = when {
+                    record.accessStatus.name != "AVAILABLE" ->
+                        localizedSourceStatus(record.accessStatus.name)
+                    active -> localizedJobStatus(latest?.status?.name ?: "PENDING")
+                    completed -> "Расшифровка готова"
+                    latest?.status == JobStatus.FAILED -> "Ошибка обработки"
+                    else -> "Без расшифровки"
+                }
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = localScribeCardColors(),
+                    shape = localScribeShape,
                 ) {
-                    Icon(
-                        Icons.Default.Mic,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(5.dp)) {
-                        Text(
-                            record.source.displayName,
-                            style = MaterialTheme.typography.titleMedium,
-                            maxLines = 2,
-                            overflow = TextOverflow.Ellipsis,
+                    Row(
+                        Modifier.fillMaxWidth().padding(12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Icon(
+                            Icons.Default.Mic,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 12.dp),
                         )
-                        Text(
-                            formatAudioDuration(record.source.durationMs) + " · " +
-                                localizedSourceStatus(record.accessStatus.name),
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                        if (ready) {
+                        Column(
+                            Modifier.weight(1f)
+                                .clickable { openRecord(record) }
+                                .padding(vertical = 8.dp),
+                            verticalArrangement = Arrangement.spacedBy(5.dp),
+                        ) {
                             Text(
-                                "✓ Транскрипция готова",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = MaterialTheme.colorScheme.primary,
+                                libraryTitle(record),
+                                style = MaterialTheme.typography.titleMedium,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
                             )
+                            Text(
+                                formatAudioDuration(record.source.durationMs) +
+                                    " · " + label,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            record.recordedAtEpochMs?.let {
+                                Text(
+                                    "Записано: " + formatLocalDate(it),
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                            Text(
+                                record.addedAtEpochMs?.let {
+                                    "Добавлено: " + formatLocalDate(it)
+                                } ?: "Дата добавления неизвестна",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
+                        var menuOpen by remember { mutableStateOf(false) }
+                        Box {
+                            IconButton(onClick = { menuOpen = true }) {
+                                Icon(Icons.Default.Tune, contentDescription = "Действия с записью")
+                            }
+                            androidx.compose.material3.DropdownMenu(
+                                expanded = menuOpen,
+                                onDismissRequest = { menuOpen = false },
+                            ) {
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text("Переименовать") },
+                                    onClick = {
+                                        renameText = libraryTitle(record)
+                                        renameTarget = record
+                                        menuOpen = false
+                                    },
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
+        item { Spacer(Modifier.height(16.dp)) }
+    }
+    renameTarget?.let { record ->
+        AlertDialog(
+            onDismissRequest = { renameTarget = null },
+            title = { Text("Название записи") },
+            text = {
+                OutlinedTextField(
+                    value = renameText,
+                    onValueChange = { renameText = it.take(120) },
+                    label = { Text("Новое название") },
+                    singleLine = true,
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = renameText.isNotBlank(),
+                    onClick = {
+                        renameTarget = null
+                        scope.launch {
+                            runCatching {
+                                graph.audioRepository.renameSource(record.source.id, renameText)
+                            }.onSuccess {
+                                uiModel.setStatusMessage("Название изменено")
+                            }.onFailure {
+                                uiModel.setStatusMessage("Не удалось переименовать запись")
+                            }
+                        }
+                    },
+                ) { Text("Сохранить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { renameTarget = null }) { Text("Отмена") }
+            },
+        )
+    }
+}
+
+@Composable
+private fun LibraryEmptyState(title: String, description: String) {
+    Card(colors = localScribeCardColors(), shape = localScribeShape) {
+        Column(
+            Modifier.fillMaxWidth().padding(24.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(
+                description,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }
