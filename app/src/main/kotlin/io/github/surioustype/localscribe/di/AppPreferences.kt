@@ -4,6 +4,23 @@ import android.content.Context
 
 class AppPreferences(context: Context) {
     private val values = context.getSharedPreferences("ui_preferences", Context.MODE_PRIVATE)
+    var libraryFilter: String
+        get() =
+            values.getString("library_filter", null)
+                ?.takeIf { it in setOf("all", "ready", "new", "active") }
+                ?: recordingsFilter
+        set(value) = values.edit().putString("library_filter", value).apply()
+    var librarySort: String
+        get() =
+            values.getString("library_sort", null)
+                ?.takeIf { it in setOf("added", "recorded", "title", "long", "short") }
+                ?: when (recordingsSort) {
+                    "az", "za" -> "title"
+                    "long" -> "long"
+                    "short" -> "short"
+                    else -> "added"
+                }
+        set(value) = values.edit().putString("library_sort", value).apply()
     var onboardingComplete: Boolean
         get() = values.getBoolean("onboarding_complete", false)
         set(value) = values.edit().putBoolean("onboarding_complete", value).apply()
