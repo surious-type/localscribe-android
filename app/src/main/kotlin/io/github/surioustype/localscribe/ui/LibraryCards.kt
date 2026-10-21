@@ -276,3 +276,40 @@ internal fun LibraryEmptyState(
         }
     }
 }
+
+@Composable
+internal fun LibraryFeedbackMessage(
+    message: String,
+    onDismiss: () -> Unit,
+) {
+    val failure =
+        message.startsWith("Не удалось") ||
+            message.startsWith("Доступ к библиотеке не предоставлен")
+    val tone =
+        if (failure) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+    Surface(
+        color = tone.copy(alpha = 0.10f),
+        shape = RoundedCornerShape(16.dp),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Icon(
+                if (failure) Icons.Default.Warning else Icons.Default.Description,
+                contentDescription = null,
+                tint = tone,
+            )
+            Text(
+                message,
+                modifier = Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.Close, contentDescription = "Скрыть уведомление")
+            }
+        }
+    }
+}
