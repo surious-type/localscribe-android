@@ -122,6 +122,7 @@ import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackControlle
 import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackPreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.UUID
 
