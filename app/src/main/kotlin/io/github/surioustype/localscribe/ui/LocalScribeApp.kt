@@ -583,7 +583,11 @@ private fun Home(
             if (ordered.isEmpty()) {
                 item {
                     LibraryEmptyState(
-                        if (sources.isEmpty()) "Записей пока нет" else "Нет записей с этим статусом",
+                        if (sources.isEmpty()) {
+                            "Записей пока нет"
+                        } else {
+                            "Нет записей с этим статусом"
+                        },
                         if (sources.isEmpty()) {
                             "Импортируйте аудио или разрешите доступ к записям на устройстве."
                         } else {

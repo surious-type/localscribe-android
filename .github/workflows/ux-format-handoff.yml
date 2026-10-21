@@ -21,6 +21,20 @@ jobs:
           "$sdkmanager" --install 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;30.0.16248370' 'cmake;4.1.2'
       - name: Format changed Kotlin files
         run: ./gradlew :app:appKtlintFormat || true
+      - name: Generate checked Room schema and check Kotlin types
+        run: ./gradlew :app:kspGithubDebugKotlin || true
+      - name: Output generated Room schema
+        run: |
+          python3 - <<'PY'
+          import base64, pathlib
+          p=pathlib.Path('app/schemas/io.github.surioustype.localscribe.data.LocalScribeDatabase/6.json')
+          if p.exists():
+              print('UX_SCHEMA_BEGIN ' + str(p))
+              print(base64.b64encode(p.read_bytes()).decode())
+              print('UX_SCHEMA_END ' + str(p))
+          else:
+              print('ROOM_SCHEMA_MISSING')
+          PY
       - name: Output formatted sources
         run: |
           python3 - <<'PY'
