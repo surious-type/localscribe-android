@@ -24,6 +24,7 @@ data class PlaybackState(
     val isPreparing: Boolean = false,
     val isReady: Boolean = false,
     val isPlaying: Boolean = false,
+    val speed: Float = 1f,
     val errorMessage: String? = null,
 )
 
@@ -38,6 +39,8 @@ interface AudioPlayerBackend : AutoCloseable {
     fun pause()
 
     fun seekTo(positionMs: Long)
+
+    fun setSpeed(speed: Float)
 
     fun currentPositionMs(): Long
 
@@ -68,6 +71,7 @@ class TranscriptPlaybackController(
     private var pollingJob: Job? = null
     private var sourceUri: String? = null
     private var requestedPositionMs = 0L
+    private var playbackSpeed = 1f
     private var shouldPlayWhenReady = false
     private var generation = 0L
     private var closed = false
@@ -77,6 +81,20 @@ class TranscriptPlaybackController(
         shouldPlayWhenReady = true
         ensurePrepared(sourceUri)
         backend?.takeIf { mutableState.value.isReady }?.let { start(it) }
+    }
+
+    fun setSpeed(speed: Float) {
+        if (closed) return
+        playbackSpeed = speed.coerceIn(0.5f, 2f)
+        backend?.takeIf { mutableState.value.isReady }?.let { runCatching { it.setSpeed(playbackSpeed) } }
+        mutableState.value = mutableState.value.copy(speed = playbackSpeed)
+    }
+
+    fun skipBy(deltaMs: Long) {
+        val uri = sourceUri ?: return
+        val limit = mutableState.value.durationMs
+        val target = (mutableState.value.positionMs + deltaMs).coerceAtLeast(0L)
+        seekTo(uri, if (limit > 0L) target.coerceAtMost(limit) else target)
     }
 
     fun pause() {
@@ -113,6 +131,7 @@ class TranscriptPlaybackController(
                 isPreparing = false,
                 isReady = false,
                 isPlaying = false,
+                speed = playbackSpeed,
             )
     }
 
@@ -148,6 +167,7 @@ class TranscriptPlaybackController(
                 sourceUri = nextSourceUri,
                 positionMs = requestedPositionMs,
                 isPreparing = true,
+                speed = playbackSpeed,
             )
         preparationJob =
             scope.launch {
@@ -169,6 +189,7 @@ class TranscriptPlaybackController(
                             isPreparing = false,
                             isReady = true,
                         )
+                    createdBackend.setSpeed(playbackSpeed)
                     seek(createdBackend, requestedPositionMs)
                     if (shouldPlayWhenReady) start(createdBackend)
                 } catch (cancellation: CancellationException) {
@@ -310,6 +331,10 @@ class AndroidMediaPlayerBackend(
 
     override fun seekTo(positionMs: Long) {
         if (!closed) mediaPlayer.seekTo(positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+    }
+
+    override fun setSpeed(speed: Float) {
+        if (!closed) mediaPlayer.playbackParams = mediaPlayer.playbackParams.setSpeed(speed)
     }
 
     override fun currentPositionMs(): Long =
