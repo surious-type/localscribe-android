@@ -127,6 +127,41 @@ class TranscriptPlaybackControllerTest {
             assertEquals(1, backend.closeCalls)
         }
 
+    @Test
+    fun `speed survives preparation and backend recreation`() =
+        runTest {
+            val first = FakeBackend()
+            val second = FakeBackend()
+            val backends = ArrayDeque(listOf(first, second))
+            val controller =
+                TranscriptPlaybackController(backgroundScope, { backends.removeFirst() })
+
+            controller.setSpeed(1.5f)
+            controller.play("content://audio/one")
+            runCurrent()
+            assertEquals(1.5f, first.speed)
+            assertEquals(1.5f, controller.state.value.speed)
+
+            controller.onStop()
+            controller.play("content://audio/one")
+            runCurrent()
+            assertEquals(1.5f, second.speed)
+            assertTrue(controller.state.value.isPlaying)
+        }
+
+    @Test
+    fun `out of bounds speed clamps to supported range`() =
+        runTest {
+            val backend = FakeBackend()
+            val controller = TranscriptPlaybackController(backgroundScope, { backend })
+            controller.seekTo("content://audio/one", 0)
+            runCurrent()
+            controller.setSpeed(3.0f)
+            assertEquals(2.0f, backend.speed)
+            controller.setSpeed(0.1f)
+            assertEquals(0.5f, backend.speed)
+        }
+
     private class FakeBackend(
         private val preparationFailure: Throwable? = null,
     ) : AudioPlayerBackend {
@@ -135,6 +170,7 @@ class TranscriptPlaybackControllerTest {
         var playCalls = 0
         var pauseCalls = 0
         var closeCalls = 0
+        var speed = 1f
         private var playing = false
         var currentPosition = 3_200L
         private var completionListener: (() -> Unit)? = null
@@ -156,6 +192,10 @@ class TranscriptPlaybackControllerTest {
 
         override fun seekTo(positionMs: Long) {
             seekPositions += positionMs
+        }
+
+        override fun setSpeed(speed: Float) {
+            this.speed = speed
         }
 
         override fun currentPositionMs(): Long = currentPosition
