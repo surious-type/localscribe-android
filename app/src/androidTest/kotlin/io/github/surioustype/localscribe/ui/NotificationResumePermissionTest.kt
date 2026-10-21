@@ -56,7 +56,7 @@ class NotificationResumePermissionTest {
                 .commit()
         }
         rule.activityRule.scenario.recreate()
-        rule.onNodeWithText("Поиск по записям и тексту…").assertIsDisplayed()
+        rule.onNodeWithText("Ваши записи").assertIsDisplayed()
     }
 
     @Test
