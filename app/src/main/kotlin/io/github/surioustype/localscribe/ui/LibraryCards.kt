@@ -74,7 +74,8 @@ internal fun LibraryRecordingCard(
             LibraryRecordState.NO_TRANSCRIPT -> Icons.Default.Mic
         }
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier =
+            Modifier.fillMaxWidth().clickable(onClickLabel = "Открыть запись") { onOpen() },
         colors = localScribeCardColors(),
         shape = localScribeShape,
     ) {
@@ -96,11 +97,7 @@ internal fun LibraryRecordingCard(
                 Icon(icon, contentDescription = null, tint = tone)
             }
             Column(
-                modifier =
-                    Modifier
-                        .weight(1f)
-                        .clickable(onClickLabel = "Открыть запись") { onOpen() }
-                        .padding(vertical = 2.dp),
+                modifier = Modifier.weight(1f).padding(vertical = 2.dp),
                 verticalArrangement = Arrangement.spacedBy(7.dp),
             ) {
                 Text(
