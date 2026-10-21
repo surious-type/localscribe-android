@@ -187,7 +187,7 @@ class LocalScribeDatabaseMigrationTest {
     }
 
     @Test
-    fun migration4To5AllowsFingerprintRestartToReplaceLegacyCheckpoints() =
+    fun migration4To6AllowsFingerprintRestartToReplaceLegacyCheckpoints() =
         runBlocking {
             helper.createDatabase(RESTART_DATABASE_NAME, 4).apply {
                 execSQL(
@@ -227,9 +227,10 @@ class LocalScribeDatabaseMigrationTest {
             helper
                 .runMigrationsAndValidate(
                     RESTART_DATABASE_NAME,
-                    5,
+                    6,
                     true,
                     LocalScribeDatabase.MIGRATION_4_5,
+                    LocalScribeDatabase.MIGRATION_5_6,
                 ).close()
 
             val context = InstrumentationRegistry.getInstrumentation().targetContext
