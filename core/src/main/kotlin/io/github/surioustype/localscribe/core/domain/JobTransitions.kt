@@ -17,7 +17,7 @@ object JobTransitions {
                 setOf(JobStatus.PAUSED, JobStatus.CANCELLED, JobStatus.FAILED, JobStatus.COMPLETED),
             JobStatus.PAUSED to setOf(JobStatus.RUNNING, JobStatus.CANCELLED),
             JobStatus.CANCELLED to emptySet(),
-            JobStatus.FAILED to emptySet(),
+            JobStatus.FAILED to setOf(JobStatus.RUNNING),
             JobStatus.COMPLETED to emptySet(),
         )
 
