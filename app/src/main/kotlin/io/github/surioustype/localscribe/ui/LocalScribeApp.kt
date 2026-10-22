@@ -1499,6 +1499,11 @@ private fun TranscriptScreen(
             searchableTranscriptSegments(visibleSegments, query)
         }
     val transcriptListState = rememberLazyListState()
+    val readingPositionStore = remember(context) { TranscriptReadingPositionStore(context) }
+    val savedReadingPosition = remember(jobId) { readingPositionStore.read(jobId) }
+    var pendingReadingRestore by remember(jobId) {
+        mutableStateOf(savedReadingPosition != null)
+    }
     val versionHeader = if (versions.isNotEmpty()) 1 else 0
     val rerunHeader = if (job?.status == JobStatus.COMPLETED) 1 else 0
     val transcriptRowOffset = versionHeader + rerunHeader + 3
@@ -1512,11 +1517,64 @@ private fun TranscriptScreen(
                 if (isScrolling && !programmaticScroll) followPlayback = false
             }
     }
+    LaunchedEffect(
+        jobId,
+        savedReadingPosition,
+        filtered,
+        transcriptRowOffset,
+        seekToMs,
+        versions,
+    ) {
+        if (pendingReadingRestore) {
+            if (seekToMs != null || query.isNotBlank()) {
+                pendingReadingRestore = false
+            } else if (
+                filtered.isNotEmpty() &&
+                (job?.status != JobStatus.COMPLETED || versions.any { it.id == jobId })
+            ) {
+                val position = savedReadingPosition
+                val segmentIndex =
+                    filtered.indexOfFirst { it.id == position?.segmentId }
+                pendingReadingRestore = false
+                if (position != null && (position.segmentId == null || segmentIndex >= 0)) {
+                    programmaticScroll = true
+                    try {
+                        transcriptListState.scrollToItem(
+                            if (position.segmentId == null) 0 else {
+                                segmentIndex + transcriptRowOffset
+                            },
+                            position.offsetPx,
+                        )
+                    } finally {
+                        programmaticScroll = false
+                    }
+                }
+            }
+        }
+    }
+    LaunchedEffect(transcriptListState, filtered, transcriptRowOffset, pendingReadingRestore) {
+        snapshotFlow {
+            Triple(
+                transcriptListState.isScrollInProgress,
+                transcriptListState.firstVisibleItemIndex,
+                transcriptListState.firstVisibleItemScrollOffset,
+            )
+        }.collect { (scrolling, index, offset) ->
+            if (!scrolling && !pendingReadingRestore && filtered.isNotEmpty()) {
+                val segment = filtered.getOrNull(index - transcriptRowOffset)
+                readingPositionStore.save(jobId, segment?.id, offset)
+            }
+        }
+    }
     LaunchedEffect(activeIndex, followPlayback, playback.isPlaying, transcriptRowOffset) {
-        if (followPlayback && activeIndex != null) {
+        if (
+            !pendingReadingRestore &&
+            shouldAutoFollowTranscript(followPlayback, playback.isPlaying, activeIndex)
+        ) {
+            val index = requireNotNull(activeIndex)
             programmaticScroll = true
             try {
-                transcriptListState.animateScrollToItem(activeIndex + transcriptRowOffset)
+                transcriptListState.animateScrollToItem(index + transcriptRowOffset)
             } finally {
                 programmaticScroll = false
             }
@@ -1800,7 +1858,21 @@ private fun TranscriptScreen(
         }
         if (!followPlayback) {
             TextButton(
-                onClick = { followPlayback = true },
+                onClick = {
+                    followPlayback = true
+                    activeIndex?.let { index ->
+                        scope.launch {
+                            programmaticScroll = true
+                            try {
+                                transcriptListState.animateScrollToItem(
+                                    index + transcriptRowOffset,
+                                )
+                            } finally {
+                                programmaticScroll = false
+                            }
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Вернуться к воспроизведению") }
         }
