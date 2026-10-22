@@ -153,9 +153,17 @@ class TranscriptionService : Service() {
         manualResumeIds.retainAll(paused)
         val eligible =
             jobs.filter { it.status == JobStatus.PENDING || it.id in manualResumeIds }
+        val ready =
+            eligible.map { candidate ->
+                if (candidate.id in manualResumeIds) {
+                    candidate.copy(status = JobStatus.PENDING)
+                } else {
+                    candidate
+                }
+            }
         val ordered =
             pendingTranscriptionQueue(
-                eligible.map { if (it.id in manualResumeIds) it.copy(status = JobStatus.PENDING) else it },
+                ready,
                 dependencies.queuePriorities.priorities.value,
             ).map { it.id }
         executionQueue.schedule(ordered, startId)
