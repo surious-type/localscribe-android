@@ -277,7 +277,7 @@ class TranscriptionCoordinatorTest {
 
             assertEquals(ExecutionOutcome.Paused, coordinator.execute(JOB_ID))
             assertEquals(JobStatus.PAUSED, repository.currentJob.status)
-            assertEquals("fingerprint", repository.currentJob.sourceFingerprint)
+            assertEquals("original", repository.currentJob.sourceFingerprint)
             assertEquals("source_identity_changed", repository.currentJob.failure?.diagnostic)
             assertEquals(listOf("keep this"), repository.segments.map { it.text })
             assertEquals(
