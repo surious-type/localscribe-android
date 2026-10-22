@@ -1540,7 +1540,7 @@ private fun TranscriptScreen(
         LazyColumn(
             state = transcriptListState,
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement = Arrangement.spacedBy(if (readerMode == TranscriptReadingMode.CONTINUOUS) 2.dp else 12.dp),
         ) {
             // Completed attempts survive newer running or failed reruns.
             if (versions.isNotEmpty()) {
@@ -1682,6 +1682,16 @@ private fun TranscriptScreen(
                             correction.originalText == source.text
                         }
                     }
+                if (readerMode == TranscriptReadingMode.CONTINUOUS) {
+                    TranscriptContinuousParagraph(
+                        segment = segment,
+                        query = query,
+                        active = activeIndex != null && filtered[activeIndex].id == segment.id,
+                        onSeek = {
+                            sourceUri?.let { player.seekTo(it, segment.absoluteStartMs) }
+                        },
+                    )
+                } else {
                 Card(
                     colors =
                         if (activeIndex != null && filtered[activeIndex].id == segment.id) {
@@ -1742,6 +1752,7 @@ private fun TranscriptScreen(
                             )
                         }
                     }
+                }
                 }
             }
             item { Spacer(Modifier.height(16.dp)) }
@@ -1876,6 +1887,17 @@ private fun TranscriptScreen(
                 }
             }
         }
+    }
+    if (showVersions && job != null && versions.isNotEmpty()) {
+        TranscriptVersionsSheet(
+            graph = graph,
+            current = requireNotNull(job),
+            versions = versions,
+            primaryId = primaryVersions[job?.sourceId.orEmpty()],
+            onChooseVersion = onChooseVersion,
+            onDismiss = { showVersions = false },
+            onStatus = setStatus,
+        )
     }
     BackHandler(enabled = showExport || editTarget != null) {
         if (editTarget != null) editTarget = null else showExport = false
