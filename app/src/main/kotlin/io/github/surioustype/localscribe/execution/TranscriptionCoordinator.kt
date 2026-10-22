@@ -374,6 +374,7 @@ class TranscriptionCoordinator(
             val job = repository.getJob(jobId) ?: return
             val active = activeExecutions.filter { it.jobId == jobId }
             if (job.status == JobStatus.PENDING) {
+                repository.pauseJob(jobId, atEpochMs, reason)
                 active.forEach { it.request.set(ControlRequest.PAUSE) }
                 return
             }
