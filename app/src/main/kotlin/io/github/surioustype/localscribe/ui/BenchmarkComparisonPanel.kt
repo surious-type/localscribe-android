@@ -45,9 +45,10 @@ internal fun comparableBenchmarkHistory(
                 it.realTimeFactor.isFinite() &&
                 it.realTimeFactor >= 0.0
         }
-    val anchor = candidates.maxWithOrNull(
-        compareBy<BenchmarkRecord> { it.createdAtEpochMs }.thenBy { it.id },
-    ) ?: return emptyList()
+    val anchor =
+        candidates.maxWithOrNull(
+            compareBy<BenchmarkRecord> { it.createdAtEpochMs }.thenBy { it.id },
+        ) ?: return emptyList()
     return BenchmarkComparisons.comparableModels(anchor, candidates)
 }
 
@@ -123,11 +124,11 @@ fun BenchmarkComparisonPanel(
                         )
                     }
                 }
+                val selectedCount =
+                    selectedIds.count { id -> models.any { it.descriptorId == id } }
                 Button(
                     onClick = onCompare,
-                    enabled = !busy && selectedIds.count { id ->
-                        models.any { it.descriptorId == id }
-                    } >= 2,
+                    enabled = !busy && selectedCount >= 2,
                 ) {
                     Text("Тестировать выбранные: скорость и качество")
                 }
@@ -146,7 +147,10 @@ fun BenchmarkComparisonPanel(
                     style = MaterialTheme.typography.bodySmall,
                 )
             } else {
-                Text("Результаты при одинаковых условиях", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Результаты при одинаковых условиях",
+                    style = MaterialTheme.typography.titleSmall,
+                )
                 Text(
                     "RTF — длительность обработки / длительность аудио: меньше — быстрее. " +
                         "WER — доля ошибок в словах: меньше — точнее. " +
@@ -156,8 +160,11 @@ fun BenchmarkComparisonPanel(
                 val maxRtf = comparable.maxOf { it.realTimeFactor }.coerceAtLeast(0.01)
                 val maxWer = comparable.mapNotNull { it.wordErrorRate }.maxOrNull() ?: 1.0
                 val maxMemory =
-                    comparable.mapNotNull { it.approximatePeakMemoryBytes }
-                        .maxOrNull()?.toDouble()?.div(1_048_576.0) ?: 1.0
+                    comparable
+                        .mapNotNull { it.approximatePeakMemoryBytes }
+                        .maxOrNull()
+                        ?.toDouble()
+                        ?.div(1_048_576.0) ?: 1.0
                 comparable.forEach { record ->
                     Text(record.modelId, style = MaterialTheme.typography.labelLarge)
                     MetricBar("RTF ↓", record.realTimeFactor, maxRtf, "")
@@ -184,20 +191,23 @@ fun BenchmarkComparisonPanel(
                 )
                 records.take(8).forEach { record ->
                     val date =
-                        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                        DateFormat
+                            .getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
                             .format(Date(record.createdAtEpochMs))
                     Text(
                         date + " · " + record.modelId + " · " + record.sampleId,
                         style = MaterialTheme.typography.labelMedium,
                     )
+                    val werText =
+                        record.wordErrorRate?.let { metric(it * 100) + "%" } ?: "—"
+                    val memoryText =
+                        record.approximatePeakMemoryBytes?.let {
+                            (it / 1_048_576).toString() + " МБ"
+                        } ?: "—"
                     Text(
                         "RTF " + metric(record.realTimeFactor) +
-                            " · WER " +
-                            (record.wordErrorRate?.let { metric(it * 100) + "%" } ?: "—") +
-                            " · Память " +
-                            (record.approximatePeakMemoryBytes?.let {
-                                (it / 1_048_576).toString() + " МБ"
-                            } ?: "—") +
+                            " · WER " + werText +
+                            " · Память " + memoryText +
                             " · Потоки " + record.config.threadCount,
                         style = MaterialTheme.typography.bodySmall,
                     )
