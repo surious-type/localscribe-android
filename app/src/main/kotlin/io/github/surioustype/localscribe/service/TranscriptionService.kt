@@ -301,9 +301,9 @@ class TranscriptionService : Service() {
                     actionIntent(ACTION_PAUSE, jobId, 1),
                 ).addAction(
                     0,
-                    getString(R.string.action_resume),
-                    actionIntent(ACTION_RESUME, jobId, 2),
-                ).addAction(0, getString(R.string.action_stop), actionIntent(ACTION_STOP, jobId, 3))
+                    getString(R.string.action_stop),
+                    actionIntent(ACTION_STOP, jobId, 3),
+                )
         return builder.build()
     }
 
