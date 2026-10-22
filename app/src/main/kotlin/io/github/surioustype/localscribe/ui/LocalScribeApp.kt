@@ -835,6 +835,7 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
                         ?.source
                         ?.displayName,
                 showTranscript = { uiModel.showTranscript(job.id) },
+                onOpenModels = { uiModel.selectDestination(Destination.MODELS.name) },
                 queuePosition = positions[job.id],
             )
         }
@@ -1157,6 +1158,7 @@ private fun JobRow(
     graph: AppGraph,
     context: Context,
     showTranscript: () -> Unit,
+    onOpenModels: () -> Unit,
     sourceName: String? = null,
     queuePosition: Int? = null,
 ) {
@@ -1423,6 +1425,9 @@ private fun JobRow(
                         "Другая версия модели требует нового распознавания.",
                     style = MaterialTheme.typography.bodySmall,
                 )
+                OutlinedButton(onClick = onOpenModels) {
+                    Text("Открыть модели")
+                }
             }
             actionMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
@@ -1489,7 +1494,8 @@ private fun TranscriptScreen(
     val previewSegments by graph.liveTranscript
         .observe(jobId)
         .collectAsStateWithLifecycle(emptyList())
-    val visibleSegments = segments + previewSegments
+    val visibleSegments =
+        visibleTranscriptSegments(segments, previewSegments, job?.status)
     val player =
         remember {
             TranscriptPlaybackController(
