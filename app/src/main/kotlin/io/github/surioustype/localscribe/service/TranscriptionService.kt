@@ -83,7 +83,7 @@ class TranscriptionService : Service() {
                 onIdle = { _ ->
                     controlRouting.executionIdle()
                     stopForegroundAndSelf(latestStartId)
-                }
+                },
             )
         createNotificationChannel()
         dependencies.thermalMonitor.start()
