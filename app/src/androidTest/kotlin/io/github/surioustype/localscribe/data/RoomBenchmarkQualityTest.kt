@@ -45,7 +45,13 @@ class RoomBenchmarkQualityTest {
                 assertEquals(record, restored)
                 assertEquals(record, store.observe().first().single())
 
-                store.upsert(record.copy(id = "legacy", wordErrorRate = null, characterErrorRate = null))
+                store.upsert(
+                    record.copy(
+                        id = "legacy",
+                        wordErrorRate = null,
+                        characterErrorRate = null,
+                    ),
+                )
                 val legacy = requireNotNull(store.get("legacy"))
                 assertNull(legacy.wordErrorRate)
                 assertNull(legacy.characterErrorRate)
