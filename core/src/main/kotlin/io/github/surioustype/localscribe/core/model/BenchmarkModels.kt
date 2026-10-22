@@ -23,6 +23,8 @@ data class BenchmarkRecord(
     val approximatePeakMemoryBytes: Long? = null,
     val createdAtEpochMs: Long,
     val sampleId: String = "unspecified",
+    val wordErrorRate: Double? = null,
+    val characterErrorRate: Double? = null,
 )
 
 data class BenchmarkTiming(
