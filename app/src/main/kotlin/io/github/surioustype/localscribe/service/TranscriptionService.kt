@@ -13,9 +13,9 @@ import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import io.github.surioustype.localscribe.R
 import io.github.surioustype.localscribe.core.model.ChunkStatus
-import io.github.surioustype.localscribe.core.model.JobStatus
 import io.github.surioustype.localscribe.core.model.DomainFailure
 import io.github.surioustype.localscribe.core.model.FailureCode
+import io.github.surioustype.localscribe.core.model.JobStatus
 import io.github.surioustype.localscribe.core.ports.AudioRepository
 import io.github.surioustype.localscribe.execution.AndroidThermalMonitor
 import io.github.surioustype.localscribe.execution.DurableTranscriptionRepository
