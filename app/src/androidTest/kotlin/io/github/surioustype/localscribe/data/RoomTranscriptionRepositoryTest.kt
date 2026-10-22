@@ -289,6 +289,51 @@ class RoomTranscriptionRepositoryTest {
         }
 
     @Test
+    fun pendingPauseSurvivesColdRecoveryWithoutStartingTheModel() =
+        runTest {
+            repository.createJob(job(), listOf(chunk("chunk-1", 0), chunk("chunk-2", 90_000)))
+            repository.pauseJob(JOB_ID, 2)
+            repository.recoverInterrupted(3)
+
+            assertEquals(JobStatus.PAUSED, repository.getJob(JOB_ID)?.status)
+            assertEquals(
+                listOf(ChunkStatus.PAUSED, ChunkStatus.PAUSED),
+                repository.observeChunks(JOB_ID).first().map { it.status },
+            )
+            repository.resumeJob(JOB_ID, 4)
+            assertEquals(JobStatus.RUNNING, repository.getJob(JOB_ID)?.status)
+            assertEquals(
+                listOf(ChunkStatus.PENDING, ChunkStatus.PENDING),
+                repository.observeChunks(JOB_ID).first().map { it.status },
+            )
+        }
+
+    @Test
+    fun cancellationPreservesAlreadyCompletedTextAndRejectsLatePreviewCommit() =
+        runTest {
+            repository.createJob(job(), listOf(chunk("chunk-1", 0), chunk("chunk-2", 90_000)))
+            repository.resumeJob(JOB_ID, 2)
+            repository.claimNextChunk(JOB_ID, 3)
+            repository.completeChunk(
+                "chunk-1",
+                listOf(TranscriptSegment("saved", "chunk-1", 100, 500, "permanent")),
+                4,
+            )
+            repository.claimNextChunk(JOB_ID, 5)
+            repository.cancelJob(JOB_ID, 6)
+
+            assertEquals(JobStatus.CANCELLED, repository.getJob(JOB_ID)?.status)
+            assertEquals(
+                listOf("permanent"),
+                repository.observeSegments(JOB_ID).first().map { it.text },
+            )
+            assertEquals(
+                listOf(ChunkStatus.COMPLETED, ChunkStatus.CANCELLED),
+                repository.observeChunks(JOB_ID).first().map { it.status },
+            )
+        }
+
+    @Test
     fun repeatedPauseIsIdempotent() =
         runTest {
             repository.createJob(job(), listOf(chunk("chunk-1", 0)))
