@@ -1523,6 +1523,7 @@ private fun TranscriptScreen(
         filtered,
         transcriptRowOffset,
         seekToMs,
+        query,
         versions,
     ) {
         if (pendingReadingRestore) {
@@ -1566,7 +1567,13 @@ private fun TranscriptScreen(
             }
         }
     }
-    LaunchedEffect(activeIndex, followPlayback, playback.isPlaying, transcriptRowOffset) {
+    LaunchedEffect(
+        activeIndex,
+        followPlayback,
+        playback.isPlaying,
+        transcriptRowOffset,
+        pendingReadingRestore,
+    ) {
         if (
             !pendingReadingRestore &&
             shouldAutoFollowTranscript(followPlayback, playback.isPlaying, activeIndex)
