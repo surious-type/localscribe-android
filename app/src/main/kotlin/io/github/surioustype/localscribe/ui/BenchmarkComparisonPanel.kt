@@ -2,7 +2,6 @@ package io.github.surioustype.localscribe.ui
 
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyRow
@@ -20,6 +19,8 @@ import io.github.surioustype.localscribe.benchmark.BenchmarkRunState
 import io.github.surioustype.localscribe.core.model.BenchmarkRecord
 import io.github.surioustype.localscribe.core.model.InferenceConfig
 import io.github.surioustype.localscribe.core.model.InstalledModel
+import java.text.DateFormat
+import java.util.Date
 import java.util.Locale
 
 private const val COMPARISON_SAMPLE = "english_jfk_37s"
@@ -176,16 +177,30 @@ fun BenchmarkComparisonPanel(
             }
             if (records.isNotEmpty()) {
                 Text("История измерений", style = MaterialTheme.typography.titleSmall)
+                Text(
+                    "Архив включает тесты с разными настройками; " +
+                        "сравнивайте напрямую только графики выше.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
                 records.take(8).forEach { record ->
-                    Row(Modifier.fillMaxWidth()) {
-                        Text(
-                            record.modelId + " · RTF " + metric(record.realTimeFactor) +
-                                " · WER " +
-                                (record.wordErrorRate?.let { metric(it * 100) + "%" } ?: "—") +
-                                " · " + record.sampleId,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
+                    val date =
+                        DateFormat.getDateTimeInstance(DateFormat.SHORT, DateFormat.SHORT)
+                            .format(Date(record.createdAtEpochMs))
+                    Text(
+                        date + " · " + record.modelId + " · " + record.sampleId,
+                        style = MaterialTheme.typography.labelMedium,
+                    )
+                    Text(
+                        "RTF " + metric(record.realTimeFactor) +
+                            " · WER " +
+                            (record.wordErrorRate?.let { metric(it * 100) + "%" } ?: "—") +
+                            " · Память " +
+                            (record.approximatePeakMemoryBytes?.let {
+                                (it / 1_048_576).toString() + " МБ"
+                            } ?: "—") +
+                            " · Потоки " + record.config.threadCount,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
         }
