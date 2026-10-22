@@ -175,6 +175,15 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
             }
             return@MaterialTheme
         }
+        LaunchedEffect(graph) {
+            try {
+                graph.awaitStartupRecovery()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                uiModel.setStatusMessage("Не удалось восстановить состояние задач")
+            }
+        }
         LaunchedEffect(Unit) {
             graph.updates.checkForUpdate(AppVersion(BuildConfig.VERSION_NAME), force = false)
         }
