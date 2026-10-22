@@ -36,7 +36,10 @@ class TranscriptReadingTest {
         val newer = job("new", JobStatus.COMPLETED, created = 400)
 
         assertEquals("old", preferredCompletedTranscript(listOf(old, running), "source", null)?.id)
-        assertEquals("old", preferredCompletedTranscript(listOf(old, failed), "source", "failed")?.id)
+        assertEquals(
+            "old",
+            preferredCompletedTranscript(listOf(old, failed), "source", "failed")?.id,
+        )
         assertEquals("new", preferredCompletedTranscript(listOf(old, newer), "source", null)?.id)
         assertEquals("old", preferredCompletedTranscript(listOf(old, newer), "source", "old")?.id)
         assertNull(preferredCompletedTranscript(listOf(running, failed), "source", null))
