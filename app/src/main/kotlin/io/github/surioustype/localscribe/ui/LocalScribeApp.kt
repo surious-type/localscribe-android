@@ -1320,7 +1320,8 @@ private fun JobRow(
                                                     ),
                                             )
                                         }.onFailure {
-                                            actionMessage = "Очередь обновится при следующем запуске."
+                                            actionMessage =
+                                                "Очередь обновится при следующем запуске."
                                         }
                                     }
                                 }.onFailure {
