@@ -1196,7 +1196,7 @@ private fun SourceControls(
             },
             enabled =
                 selectedModel != null &&
-                    (selectedVad == null || vadInstalled),
+                    canStartWithSilenceSkipping(selectedVad, installedModels),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Начать транскрибацию")
