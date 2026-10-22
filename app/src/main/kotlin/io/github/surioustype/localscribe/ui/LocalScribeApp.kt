@@ -1343,7 +1343,7 @@ private fun JobRow(
                         Icon(Icons.Default.Pause, contentDescription = "Приостановить обработку")
                     }
                 }
-                if (job.status == JobStatus.PAUSED || job.status == JobStatus.PENDING) {
+                if (job.status in setOf(JobStatus.PAUSED, JobStatus.PENDING, JobStatus.FAILED)) {
                     val resume: () -> Unit = {
                         when (
                             TranscriptionStartController.resume(
@@ -1391,7 +1391,15 @@ private fun JobRow(
                             resume()
                         }
                     }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Продолжить")
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription =
+                                if (job.status == JobStatus.FAILED) {
+                                    "Повторить попытку"
+                                } else {
+                                    "Продолжить"
+                                },
+                        )
                     }
                 }
                 if (job.status in setOf(JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED)) {
