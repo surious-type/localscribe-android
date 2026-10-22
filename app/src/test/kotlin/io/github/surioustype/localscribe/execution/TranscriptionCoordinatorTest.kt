@@ -154,15 +154,15 @@ class TranscriptionCoordinatorTest {
         }
 
     @Test
-    fun `pause before execution is a safe no-op`() =
+    fun `pause before execution persists queued work as paused`() =
         runTest {
             val repository = FakeDurableRepository(job(), chunks().take(1))
             val coordinator = coordinator(repository, FakeEngine())
 
             coordinator.pause(JOB_ID, 2)
 
-            assertEquals(JobStatus.PENDING, repository.currentJob.status)
-            assertEquals(ChunkStatus.PENDING, repository.currentChunks.single().status)
+            assertEquals(JobStatus.PAUSED, repository.currentJob.status)
+            assertEquals(ChunkStatus.PAUSED, repository.currentChunks.single().status)
         }
 
     @Test
@@ -178,8 +178,8 @@ class TranscriptionCoordinatorTest {
             repository.releaseFirstGet.complete(Unit)
 
             assertEquals(ExecutionOutcome.Paused, execution.await())
-            assertEquals(JobStatus.PENDING, repository.currentJob.status)
-            assertEquals(ChunkStatus.PENDING, repository.currentChunks.single().status)
+            assertEquals(JobStatus.PAUSED, repository.currentJob.status)
+            assertEquals(ChunkStatus.PAUSED, repository.currentChunks.single().status)
             assertEquals(0, engine.loadCount)
         }
 
@@ -197,8 +197,8 @@ class TranscriptionCoordinatorTest {
             executionMutex.unlock()
 
             assertEquals(ExecutionOutcome.Paused, execution.await())
-            assertEquals(JobStatus.PENDING, repository.currentJob.status)
-            assertEquals(ChunkStatus.PENDING, repository.currentChunks.single().status)
+            assertEquals(JobStatus.PAUSED, repository.currentJob.status)
+            assertEquals(ChunkStatus.PAUSED, repository.currentChunks.single().status)
             assertEquals(0, engine.loadCount)
         }
 
