@@ -53,8 +53,9 @@ fun recommendInstalledProfile(
             ModelQuality.HIGH to 2,
         )
     val best =
-        candidates.sortedWith(
-            when (profile) {
+        candidates
+            .sortedWith(
+                when (profile) {
                 RecognitionProfile.SPEED ->
                     compareBy<Pair<InstalledModel, ModelDescriptor>> {
                         it.second.installedBytes
