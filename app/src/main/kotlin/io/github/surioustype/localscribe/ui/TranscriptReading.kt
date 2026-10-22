@@ -39,13 +39,17 @@ fun compareTranscriptVersions(
     windowMs: Long = 30_000L,
 ): List<TranscriptVersionChange> {
     require(windowMs > 0L)
+
     fun windows(segments: List<TranscriptSegment>): Map<Long, String> =
         segments
             .filter { it.absoluteStartMs >= 0 && !it.id.startsWith("preview-") }
             .groupBy { it.absoluteStartMs / windowMs }
             .mapValues { (_, rows) ->
-                rows.sortedWith(compareBy<TranscriptSegment> { it.absoluteStartMs }.thenBy { it.id })
-                    .joinToString(" ") { it.text.trim() }
+                rows
+                    .sortedWith(
+                        compareBy<TranscriptSegment> { it.absoluteStartMs }
+                            .thenBy { it.id },
+                    ).joinToString(" ") { it.text.trim() }
                     .trim()
                     .replace(Regex("\\s+"), " ")
             }
@@ -56,7 +60,9 @@ fun compareTranscriptVersions(
         .mapNotNull { window ->
             val oldText = earlier[window].orEmpty()
             val newText = later[window].orEmpty()
-            if (oldText == newText) null else {
+            if (oldText == newText) {
+                null
+            } else {
                 TranscriptVersionChange(window * windowMs, oldText, newText)
             }
         }
@@ -67,6 +73,8 @@ fun searchableTranscriptSegments(
     segments: List<TranscriptSegment>,
     query: String,
 ): List<TranscriptSegment> =
-    if (query.isBlank()) segments else segments.filter {
-        it.text.contains(query.trim(), ignoreCase = true)
+    if (query.isBlank()) {
+        segments
+    } else {
+        segments.filter { it.text.contains(query.trim(), ignoreCase = true) }
     }
