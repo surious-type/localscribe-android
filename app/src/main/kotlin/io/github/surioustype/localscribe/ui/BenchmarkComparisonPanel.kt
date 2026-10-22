@@ -17,7 +17,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import io.github.surioustype.localscribe.benchmark.BenchmarkComparisons
 import io.github.surioustype.localscribe.benchmark.BenchmarkRunState
-import io.github.surioustype.localscribe.benchmark.BenchmarkStep
 import io.github.surioustype.localscribe.core.model.BenchmarkRecord
 import io.github.surioustype.localscribe.core.model.InferenceConfig
 import io.github.surioustype.localscribe.core.model.InstalledModel
@@ -41,7 +40,7 @@ internal fun comparableBenchmarkHistory(
             it.deviceId == deviceId &&
                 it.sampleId == COMPARISON_SAMPLE &&
                 it.config == comparisonInferenceConfig() &&
-                it.modelId to it.modelHash.lowercase() in validHashes &&
+                (it.modelId to it.modelHash.lowercase()) in validHashes &&
                 it.realTimeFactor.isFinite() &&
                 it.realTimeFactor >= 0.0
         }
@@ -62,7 +61,7 @@ private fun MetricBar(
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Text(
-            "$label: " + (value?.let { metric(it) + unit } ?: "не измерено"),
+            label + ": " + (value?.let { metric(it) + unit } ?: "не измерено"),
             style = MaterialTheme.typography.bodySmall,
         )
         if (value != null && value.isFinite() && value >= 0.0) {
