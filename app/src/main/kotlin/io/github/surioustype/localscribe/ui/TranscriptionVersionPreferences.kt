@@ -9,7 +9,10 @@ import java.io.IOException
 /** Private, durable user-selected primary transcript version per audio recording. */
 class TranscriptionVersionPreferences(context: Context) {
     private val storage =
-        context.applicationContext.getSharedPreferences("transcription_primary_versions", Context.MODE_PRIVATE)
+        context.applicationContext.getSharedPreferences(
+            "transcription_primary_versions",
+            Context.MODE_PRIVATE,
+        )
 
     private val selected = MutableStateFlow(
         storage.all.mapNotNull { (key, value) ->
