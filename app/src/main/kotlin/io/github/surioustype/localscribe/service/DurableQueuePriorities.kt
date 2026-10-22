@@ -43,13 +43,14 @@ class DurableQueuePriorities(context: Context) {
         )
     private val mutablePriorities =
         MutableStateFlow(
-            preferences.all.mapNotNull { (jobId, raw) ->
-                val priority =
-                    (raw as? String)?.let { name ->
-                        QueuePriority.entries.firstOrNull { it.name == name }
-                    }
-                if (priority != null) jobId to priority else null
-            }.toMap(),
+            preferences.all
+                .mapNotNull { (jobId, raw) ->
+                    val priority =
+                        (raw as? String)?.let { name ->
+                            QueuePriority.entries.firstOrNull { it.name == name }
+                        }
+                    if (priority != null) jobId to priority else null
+                }.toMap(),
         )
     val priorities: StateFlow<Map<String, QueuePriority>> = mutablePriorities.asStateFlow()
 
