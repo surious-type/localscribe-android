@@ -259,7 +259,7 @@ class TranscriptionCoordinator(
                             job.config.inference.withThreads(
                                 thermal.threadCount(job.config.inference.threadCount),
                             )
-                        liveTranscript.clear(jobId)
+                        liveTranscript.beginChunk(jobId, chunk.id)
                         val inferenceStarted = System.nanoTime()
                         val result =
                             if (prepared.isSilent) {
