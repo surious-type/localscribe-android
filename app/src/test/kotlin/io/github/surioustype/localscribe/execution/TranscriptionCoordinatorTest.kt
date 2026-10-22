@@ -316,6 +316,41 @@ class TranscriptionCoordinatorTest {
         }
 
     @Test
+    fun `explicit retry after native failure keeps already saved chunks`() =
+        runTest {
+            val completed = chunks().first().copy(status = ChunkStatus.COMPLETED)
+            val repository = FakeDurableRepository(job(), listOf(completed, chunks().last()))
+            repository.segments +=
+                TranscriptSegment("old", completed.id, 100, 500, "committed")
+            val engine =
+                FakeEngine().apply {
+                    transcribeFailure =
+                        WhisperEngineException(
+                            DomainFailure(FailureCode.NATIVE_FAILURE, "native_transient"),
+                            "native_transient",
+                        )
+                }
+            val coordinator = coordinator(repository, engine)
+
+            val failure = coordinator.execute(JOB_ID)
+            assertTrue(failure is ExecutionOutcome.Failed)
+            assertEquals(JobStatus.FAILED, repository.currentJob.status)
+            assertEquals(ChunkStatus.COMPLETED, repository.currentChunks.first().status)
+            assertEquals("committed", repository.segments.single().text)
+
+            engine.transcribeFailure = null
+
+            assertEquals(ExecutionOutcome.Completed, coordinator.execute(JOB_ID))
+            assertEquals(JobStatus.COMPLETED, repository.currentJob.status)
+            assertEquals(
+                listOf("committed", "first"),
+                repository.segments.map { it.text },
+            )
+            assertEquals(ChunkStatus.COMPLETED, repository.currentChunks.first().status)
+            assertEquals(ChunkStatus.COMPLETED, repository.currentChunks.last().status)
+        }
+
+    @Test
     fun `late stop for completed job is harmless`() =
         runTest {
             val repository =
@@ -391,6 +426,7 @@ class TranscriptionCoordinatorTest {
         val configs = mutableListOf<InferenceConfig>()
         val started = CompletableDeferred<Unit>()
         var loadFailure: Throwable? = null
+        var transcribeFailure: Throwable? = null
 
         override suspend fun loadModel(model: InstalledModel, vadModel: InstalledModel?) {
             loadFailure?.let { throw it }
@@ -412,6 +448,7 @@ class TranscriptionCoordinatorTest {
             if (cancellationSignal.isCancellationRequested()) {
                 throw kotlinx.coroutines.CancellationException("controlled")
             }
+            transcribeFailure?.let { throw it }
             return TranscriptionResult(listOf(EngineSegment(100, 400, "first")))
         }
 
@@ -561,7 +598,10 @@ class TranscriptionCoordinatorTest {
             jobId: String,
             startedAtEpochMs: Long,
         ): TranscriptionChunk? {
-            val index = currentChunks.indexOfFirst { it.status == ChunkStatus.PENDING }
+            val index =
+                currentChunks.indexOfFirst {
+                    it.status == ChunkStatus.PENDING || it.status == ChunkStatus.FAILED
+                }
             if (index < 0 || currentJob.status != JobStatus.RUNNING) return null
             return currentChunks[index]
                 .copy(
@@ -592,7 +632,14 @@ class TranscriptionCoordinatorTest {
             chunkId: String,
             failure: DomainFailure,
             failedAtEpochMs: Long,
-        ) = Unit
+        ) {
+            val index = currentChunks.indexOfFirst { it.id == chunkId }
+            currentChunks[index] =
+                currentChunks[index].copy(
+                    status = ChunkStatus.FAILED,
+                    failure = failure,
+                )
+        }
 
         override suspend fun pauseJob(jobId: String, pausedAtEpochMs: Long) =
             pauseJob(
