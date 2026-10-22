@@ -302,9 +302,11 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                                 selectedJobId,
                                 graph,
                                 savedUi.transcriptQuery,
+                                savedUi.transcriptReadingMode,
                                 savedUi.transcriptSeekToMs,
                                 savedUi.exportFormat,
                                 uiModel::setTranscriptQuery,
+                                uiModel::setTranscriptReadingMode,
                                 uiModel::setExportFormat,
                                 uiModel::completeTranscriptExport,
                                 uiModel::setStatusMessage,
@@ -388,6 +390,7 @@ private fun Home(
     val sources by graph.audioRepository.observeSources().collectAsStateWithLifecycle(emptyList())
     val jobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
     val searchSegments by graph.transcriptSearch.collectAsStateWithLifecycle(emptyList())
+    val primaryVersions by graph.transcriptVersions.selectedVersions.collectAsStateWithLifecycle()
     var filter by remember { mutableStateOf(preferences.libraryFilter) }
     var sort by remember { mutableStateOf(preferences.librarySort) }
     var renameTarget by remember { mutableStateOf<AudioSourceRecord?>(null) }
@@ -451,7 +454,9 @@ private fun Home(
             searchLibrary(ordered, searchSegments, query)
         }
     val openRecord: (AudioSourceRecord) -> Unit = { record ->
-        val completed = latestCompletedTranscriptionJob(jobs, record.source.id)
+        val completed = preferredCompletedTranscript(
+            jobs, record.source.id, primaryVersions[record.source.id],
+        )
         val active =
             jobs.any {
                 it.sourceId == record.source.id &&
@@ -821,7 +826,10 @@ private fun SourceControls(
     val existingJobs by graph.transcriptionRepository
         .observeJobs()
         .collectAsStateWithLifecycle(emptyList())
-    val latestCompletedJob = latestCompletedTranscriptionJob(existingJobs, sourceId)
+    val primaryVersions by graph.transcriptVersions.selectedVersions.collectAsStateWithLifecycle()
+    val latestCompletedJob = preferredCompletedTranscript(
+        existingJobs, sourceId, primaryVersions[sourceId],
+    )
     val transcriptionModels = installedModels.filter { it.descriptorId != "silero-v6.2.0" }
     val installedModelIds = transcriptionModels.map { it.descriptorId }.distinct()
     val vadModels = installedModels.filter { it.descriptorId == "silero-v6.2.0" }
@@ -1345,9 +1353,11 @@ private fun TranscriptScreen(
     jobId: String,
     graph: AppGraph,
     query: String,
+    readingMode: String,
     seekToMs: Long?,
     pendingExportFormat: String?,
     setQuery: (String) -> Unit,
+    setReadingMode: (TranscriptReadingMode) -> Unit,
     setExportFormat: (String?) -> Unit,
     completeExport: (Boolean) -> Unit,
     setStatus: (String?) -> Unit,
