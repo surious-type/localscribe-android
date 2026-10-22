@@ -182,10 +182,11 @@ class TranscriptionCoordinator(
                         )
                     }
                     if (job.sourceFingerprint != currentFingerprint) {
-                        repository.restartForSourceFingerprint(
+                        // The selected URI no longer identifies the original recording.
+                        // Never erase completed checkpoints without an explicit user action.
+                        return@withLock pauseForDependency(
                             jobId,
-                            currentFingerprint,
-                            clock.nowEpochMs(),
+                            DomainFailure(FailureCode.SOURCE_MISSING, "source_identity_changed"),
                         )
                     }
                     val model =
