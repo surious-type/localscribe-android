@@ -104,10 +104,10 @@ import io.github.surioustype.localscribe.core.domain.TranscriptAssembler
 import io.github.surioustype.localscribe.core.model.AppVersion
 import io.github.surioustype.localscribe.core.model.AudioSourceRecord
 import io.github.surioustype.localscribe.core.model.BenchmarkRecord
+import io.github.surioustype.localscribe.core.model.ChunkStatus
 import io.github.surioustype.localscribe.core.model.ExportFormat
 import io.github.surioustype.localscribe.core.model.InferenceConfig
 import io.github.surioustype.localscribe.core.model.InstalledModel
-import io.github.surioustype.localscribe.core.model.ChunkStatus
 import io.github.surioustype.localscribe.core.model.JobStatus
 import io.github.surioustype.localscribe.core.model.ModelKind
 import io.github.surioustype.localscribe.core.model.TranscriptionConfig
@@ -117,8 +117,8 @@ import io.github.surioustype.localscribe.core.model.VadConfig
 import io.github.surioustype.localscribe.di.AppGraph
 import io.github.surioustype.localscribe.di.AppPreferences
 import io.github.surioustype.localscribe.service.QueuePriority
-import io.github.surioustype.localscribe.service.pendingTranscriptionQueue
 import io.github.surioustype.localscribe.service.TranscriptionService
+import io.github.surioustype.localscribe.service.pendingTranscriptionQueue
 import io.github.surioustype.localscribe.ui.playback.AndroidMediaPlayerBackend
 import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackController
 import kotlinx.coroutines.CancellationException
