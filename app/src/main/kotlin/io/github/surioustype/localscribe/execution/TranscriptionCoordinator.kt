@@ -116,7 +116,7 @@ class TranscriptionCoordinator(
                     ) {
                         return@withLock ExecutionOutcome.Completed
                     }
-                    if (job.status != JobStatus.PENDING && job.status != JobStatus.PAUSED) {
+                    if (job.status !in setOf(JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED)) {
                         return@withLock ExecutionOutcome.Failed(
                             DomainFailure(
                                 FailureCode.INVALID_STATE_TRANSITION,
@@ -130,6 +130,7 @@ class TranscriptionCoordinator(
                                 ?: when (repository.getJob(jobId)?.status) {
                                     JobStatus.PENDING,
                                     JobStatus.PAUSED,
+                                    JobStatus.FAILED,
                                     -> {
                                         repository.resumeJob(jobId, clock.nowEpochMs())
                                         null
