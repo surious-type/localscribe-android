@@ -9,7 +9,10 @@ import io.github.surioustype.localscribe.core.model.ModelQuality
 import java.util.Locale
 
 enum class RecognitionProfile(val title: String, val explanation: String) {
-    SPEED("Скорость", "Для заметок и быстрой проверки. Небольшая модель, качество может быть ниже."),
+    SPEED(
+        "Скорость",
+        "Для заметок и быстрой проверки. Небольшая модель, качество может быть ниже.",
+    ),
     BALANCE("Баланс", "Для обычных записей. Средний компромисс между временем и качеством."),
     ACCURACY("Точность", "Для сложной речи. Потребует больше памяти и времени."),
 }
@@ -33,16 +36,22 @@ fun recommendInstalledProfile(
 ): ModelProfileChoice {
     val descriptions = catalog.filter { it.kind == ModelKind.TRANSCRIPTION }.associateBy { it.id }
     val candidates =
-        installed.mapNotNull { model ->
-            descriptions[model.descriptorId]?.let { descriptor -> model to descriptor }
-        }
+        installed
+            .mapNotNull { model ->
+                descriptions[model.descriptorId]?.let { descriptor -> model to descriptor }
+            }
     if (candidates.isEmpty()) {
         return ModelProfileChoice(
             null,
             "Нет установленных моделей. Скачайте подходящую модель во вкладке «Модели».",
         )
     }
-    val qualityRank = mapOf(ModelQuality.LOW to 0, ModelQuality.BALANCED to 1, ModelQuality.HIGH to 2)
+    val qualityRank =
+        mapOf(
+            ModelQuality.LOW to 0,
+            ModelQuality.BALANCED to 1,
+            ModelQuality.HIGH to 2,
+        )
     val best =
         candidates.sortedWith(
             when (profile) {
