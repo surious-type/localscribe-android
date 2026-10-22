@@ -822,13 +822,15 @@ private fun SourceControls(
     val installedModelIds = transcriptionModels.map { it.descriptorId }.distinct()
     val vadModels = installedModels.filter { it.descriptorId == "silero-v6.2.0" }
     val catalog by graph.catalog.observeCatalog().collectAsStateWithLifecycle(emptyList())
-    val vadDownloads by graph.downloads.observeDownloads()
+    val vadDownloads by graph.downloads
+        .observeDownloads()
         .collectAsStateWithLifecycle(emptyList())
     val vadDescriptor = catalog.firstOrNull { it.kind == ModelKind.VAD }
     val vadDownload = vadDownloads.firstOrNull { it.modelId == vadDescriptor?.id }
     val vadInstalled = vadModels.isNotEmpty()
     var vadMessage by remember { mutableStateOf<String?>(null) }
-    val measurements by graph.benchmark.observeBenchmarks()
+    val measurements by graph.benchmark
+        .observeBenchmarks()
         .collectAsStateWithLifecycle(emptyList())
     val hardware = remember(context) { AndroidHardwareProfile.read(context) }
     var chosenProfile by rememberSaveable(sourceId) {
@@ -1029,14 +1031,22 @@ private fun SourceControls(
                 style = MaterialTheme.typography.labelMedium,
             )
         }
+        val selectedModelName =
+            transcriptionModels
+                .firstOrNull { it.descriptorId == selectedModel }
+                ?.displayName ?: "не установлена"
         Text(
-            "Выбранная модель: " +
-                (transcriptionModels.firstOrNull { it.descriptorId == selectedModel }
-                    ?.displayName ?: "не установлена"),
+            "Выбранная модель: " + selectedModelName,
             style = MaterialTheme.typography.labelMedium,
         )
         OutlinedButton(onClick = { advancedModels = !advancedModels }) {
-            Text(if (advancedModels) "Скрыть другие модели" else "Другие модели и расширенные настройки")
+            Text(
+                if (advancedModels) {
+                    "Скрыть другие модели"
+                } else {
+                    "Другие модели и расширенные настройки"
+                },
+            )
         }
         if (advancedModels) {
             if (installedModelIds.isEmpty()) {
@@ -1950,11 +1960,12 @@ private fun Models(
         item {
             BenchmarkComparisonPanel(
                 records = benchmarks,
-                installed = installed.filter { model ->
-                    catalog.any {
-                        it.id == model.descriptorId && it.kind == ModelKind.TRANSCRIPTION
-                    }
-                },
+                installed =
+                    installed.filter { model ->
+                        catalog.any {
+                            it.id == model.descriptorId && it.kind == ModelKind.TRANSCRIPTION
+                        }
+                    },
                 deviceId = comparisonHardware.deviceId,
                 selectedIds = savedUi.selectedBenchmarkModels,
                 onSelected = uiModel::setSelectedBenchmarkModels,
@@ -1965,13 +1976,14 @@ private fun Models(
                     comparisonError = null
                     controller.start("comparison") {
                         val selected =
-                            installed.filter {
-                                it.descriptorId in savedUi.selectedBenchmarkModels &&
-                                    catalog.any { descriptor ->
-                                        descriptor.id == it.descriptorId &&
-                                            descriptor.kind == ModelKind.TRANSCRIPTION
-                                    }
-                            }.distinctBy { it.descriptorId }
+                            installed
+                                .filter {
+                                    it.descriptorId in savedUi.selectedBenchmarkModels &&
+                                        catalog.any { descriptor ->
+                                            descriptor.id == it.descriptorId &&
+                                                descriptor.kind == ModelKind.TRANSCRIPTION
+                                        }
+                                }.distinctBy { it.descriptorId }
                         if (selected.size >= 2) {
                             try {
                                 graph.benchmark.benchmarkSelected(
@@ -2178,14 +2190,16 @@ private fun Models(
                                 " · RTF " + "%.2f".format(result.realTimeFactor),
                             style = MaterialTheme.typography.bodySmall,
                         )
+                        val werLabel =
+                            result.wordErrorRate?.let {
+                                "%.1f".format(it * 100) + "%"
+                            } ?: "не измерен"
+                        val memoryLabel =
+                            result.approximatePeakMemoryBytes?.let {
+                                (it / 1_048_576).toString() + " МБ"
+                            } ?: "нет данных"
                         Text(
-                            "WER: " +
-                                (result.wordErrorRate?.let { "%.1f".format(it * 100) + "%" }
-                                    ?: "не измерен") +
-                                " · Память: " +
-                                (result.approximatePeakMemoryBytes?.let {
-                                    (it / 1_048_576).toString() + " МБ"
-                                } ?: "нет данных"),
+                            "WER: " + werLabel + " · Память: " + memoryLabel,
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
