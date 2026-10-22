@@ -821,7 +821,22 @@ private fun SourceControls(
     val transcriptionModels = installedModels.filter { it.descriptorId != "silero-v6.2.0" }
     val installedModelIds = transcriptionModels.map { it.descriptorId }.distinct()
     val vadModels = installedModels.filter { it.descriptorId == "silero-v6.2.0" }
-    val selectedModel = savedUi.sourceModelId ?: installedModelIds.firstOrNull()
+    val catalog by graph.catalog.observeCatalog().collectAsStateWithLifecycle(emptyList())
+    val measurements by graph.benchmark.observeBenchmarks()
+        .collectAsStateWithLifecycle(emptyList())
+    val hardware = remember(context) { AndroidHardwareProfile.read(context) }
+    var chosenProfile by rememberSaveable(sourceId) {
+        mutableStateOf(RecognitionProfile.BALANCE.name)
+    }
+    var advancedModels by rememberSaveable(sourceId) { mutableStateOf(false) }
+    val profile = RecognitionProfile.valueOf(chosenProfile)
+    val recommendation =
+        remember(profile, catalog, installedModels, measurements) {
+            recommendInstalledProfile(profile, catalog, transcriptionModels, measurements, hardware)
+        }
+    val selectedModel =
+        savedUi.sourceModelId ?: recommendation.model?.descriptorId
+            ?: installedModelIds.firstOrNull()
     // Prefer speech detection whenever its tiny model is installed; keep explicit opt-out.
     val selectedVad =
         when (savedUi.sourceVadModelId) {
@@ -973,41 +988,72 @@ private fun SourceControls(
                 }
             }
         }
-        Text("Модель распознавания", style = MaterialTheme.typography.titleMedium)
-        if (installedModelIds.isEmpty()) {
-            Text("Сначала скачайте модель во вкладке «Модели».")
-        }
-        transcriptionModels.forEach { model ->
-            val active = selectedModel == model.descriptorId
-            Card(
-                shape = localScribeShape,
-                colors = localScribeCardColors(),
-                modifier =
-                    Modifier.fillMaxWidth().clickable {
-                        uiModel.setSourceSetup(model.descriptorId, language, null)
+        Text("Как выбрать модель?", style = MaterialTheme.typography.titleMedium)
+        androidx.compose.foundation.layout.FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            RecognitionProfile.entries.forEach { option ->
+                FilterChip(
+                    selected = profile == option,
+                    onClick = {
+                        chosenProfile = option.name
+                        val suggested =
+                            recommendInstalledProfile(
+                                option,
+                                catalog,
+                                transcriptionModels,
+                                measurements,
+                                hardware,
+                            )
+                        uiModel.setSourceSetup(suggested.model?.descriptorId, language, null)
                     },
-            ) {
-                Row(
-                    Modifier.fillMaxWidth().padding(14.dp),
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    label = { Text(option.title) },
+                )
+            }
+        }
+        Text(profile.explanation, style = MaterialTheme.typography.bodySmall)
+        Text(recommendation.reason, style = MaterialTheme.typography.bodySmall)
+        Text(
+            "Выбранная модель: " +
+                (transcriptionModels.firstOrNull { it.descriptorId == selectedModel }
+                    ?.displayName ?: "не установлена"),
+            style = MaterialTheme.typography.labelMedium,
+        )
+        OutlinedButton(onClick = { advancedModels = !advancedModels }) {
+            Text(if (advancedModels) "Скрыть другие модели" else "Другие модели и расширенные настройки")
+        }
+        if (advancedModels) {
+            if (installedModelIds.isEmpty()) {
+                Text("Сначала скачайте модель во вкладке «Модели».")
+            }
+            transcriptionModels.forEach { model ->
+                val active = selectedModel == model.descriptorId
+                Card(
+                    shape = localScribeShape,
+                    colors = localScribeCardColors(),
+                    modifier =
+                        Modifier.fillMaxWidth().clickable {
+                            uiModel.setSourceSetup(model.descriptorId, language, null)
+                        },
                 ) {
-                    androidx.compose.material3.RadioButton(
-                        selected = active,
-                        onClick = { uiModel.setSourceSetup(model.descriptorId, language, null) },
-                    )
-                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(
-                            model.displayName,
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            if (model.descriptorId == "small") {
-                                "Рекомендуется для начала · хорошее качество"
-                            } else {
-                                "Установлена · " + (model.bytes / (1_024 * 1_024)) + " МБ"
+                    Row(
+                        Modifier.fillMaxWidth().padding(14.dp),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        androidx.compose.material3.RadioButton(
+                            selected = active,
+                            onClick = {
+                                uiModel.setSourceSetup(model.descriptorId, language, null)
                             },
-                            style = MaterialTheme.typography.bodySmall,
                         )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(model.displayName, style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Установлена · " + (model.bytes / 1_048_576) + " МБ",
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                        }
                     }
                 }
             }
