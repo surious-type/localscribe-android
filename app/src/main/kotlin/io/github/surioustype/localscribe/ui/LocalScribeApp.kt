@@ -107,6 +107,7 @@ import io.github.surioustype.localscribe.core.model.BenchmarkRecord
 import io.github.surioustype.localscribe.core.model.ExportFormat
 import io.github.surioustype.localscribe.core.model.InferenceConfig
 import io.github.surioustype.localscribe.core.model.InstalledModel
+import io.github.surioustype.localscribe.core.model.ChunkStatus
 import io.github.surioustype.localscribe.core.model.JobStatus
 import io.github.surioustype.localscribe.core.model.ModelKind
 import io.github.surioustype.localscribe.core.model.TranscriptionConfig
@@ -772,7 +773,7 @@ private fun QueueMiniPanel(
         .collectAsStateWithLifecycle(emptyList())
     val total = chunks.maxOfOrNull { it.endMs } ?: 0L
     val completed =
-        chunks.filter { it.status == io.github.surioustype.localscribe.core.model.ChunkStatus.COMPLETED }
+        chunks.filter { it.status == ChunkStatus.COMPLETED }
             .maxOfOrNull { it.endMs } ?: 0L
     Card(
         modifier =
