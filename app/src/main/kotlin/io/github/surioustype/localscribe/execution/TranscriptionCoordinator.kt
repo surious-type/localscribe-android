@@ -116,7 +116,11 @@ class TranscriptionCoordinator(
                     ) {
                         return@withLock ExecutionOutcome.Completed
                     }
-                    if (job.status !in setOf(JobStatus.PENDING, JobStatus.PAUSED, JobStatus.FAILED)) {
+                    if (
+                        job.status != JobStatus.PENDING &&
+                        job.status != JobStatus.PAUSED &&
+                        job.status != JobStatus.FAILED
+                    ) {
                         return@withLock ExecutionOutcome.Failed(
                             DomainFailure(
                                 FailureCode.INVALID_STATE_TRANSITION,
