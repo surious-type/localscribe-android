@@ -72,6 +72,56 @@ class SerialExecutionQueueTest {
         }
 
     @Test
+    fun `reprioritization changes next job but never preempts the active execution`() =
+        runTest {
+            val release = CompletableDeferred<Unit>()
+            val executions = mutableListOf<String>()
+            val queue =
+                SerialExecutionQueue(
+                    scope = this,
+                    execute = { id ->
+                        executions += id
+                        if (id == "active") release.await()
+                    },
+                    onStarted = {},
+                    onIdle = {},
+                )
+
+            queue.schedule(listOf("active", "normal", "urgent"), 1)
+            runCurrent()
+            queue.schedule(listOf("urgent", "active", "normal"), 2)
+            release.complete(Unit)
+            runCurrent()
+
+            assertEquals(listOf("active", "urgent", "normal"), executions)
+        }
+
+    @Test
+    fun `paused or cancelled waiting job is removed without cancelling other work`() =
+        runTest {
+            val release = CompletableDeferred<Unit>()
+            val executions = mutableListOf<String>()
+            val queue =
+                SerialExecutionQueue(
+                    scope = this,
+                    execute = { id ->
+                        executions += id
+                        if (id == "active") release.await()
+                    },
+                    onStarted = {},
+                    onIdle = {},
+                )
+
+            queue.schedule(listOf("active", "paused", "last"), 1)
+            runCurrent()
+            queue.remove("paused")
+            release.complete(Unit)
+            runCurrent()
+
+            assertEquals(listOf("active", "last"), executions)
+        }
+
+    @Test
     fun `cancel prevents queued work and idle callbacks`() =
         runTest {
             val release = CompletableDeferred<Unit>()
