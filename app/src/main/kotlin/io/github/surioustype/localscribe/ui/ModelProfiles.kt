@@ -52,26 +52,24 @@ fun recommendInstalledProfile(
             ModelQuality.BALANCED to 1,
             ModelQuality.HIGH to 2,
         )
-    val best =
-        candidates
-            .sortedWith(
-                when (profile) {
-                RecognitionProfile.SPEED ->
-                    compareBy<Pair<InstalledModel, ModelDescriptor>> {
-                        it.second.installedBytes
-                    }.thenBy { it.first.descriptorId }
-                RecognitionProfile.BALANCE ->
-                    compareBy<Pair<InstalledModel, ModelDescriptor>> {
-                        kotlin.math.abs((qualityRank[it.second.quality] ?: 1) - 1)
-                    }.thenBy { it.second.installedBytes }
-                        .thenBy { it.first.descriptorId }
-                RecognitionProfile.ACCURACY ->
-                    compareByDescending<Pair<InstalledModel, ModelDescriptor>> {
-                        qualityRank[it.second.quality] ?: 0
-                    }.thenByDescending { it.second.installedBytes }
-                        .thenBy { it.first.descriptorId }
-            },
-        ).first()
+    val ranking =
+        when (profile) {
+            RecognitionProfile.SPEED ->
+                compareBy<Pair<InstalledModel, ModelDescriptor>> {
+                    it.second.installedBytes
+                }.thenBy { it.first.descriptorId }
+            RecognitionProfile.BALANCE ->
+                compareBy<Pair<InstalledModel, ModelDescriptor>> {
+                    kotlin.math.abs((qualityRank[it.second.quality] ?: 1) - 1)
+                }.thenBy { it.second.installedBytes }
+                    .thenBy { it.first.descriptorId }
+            RecognitionProfile.ACCURACY ->
+                compareByDescending<Pair<InstalledModel, ModelDescriptor>> {
+                    qualityRank[it.second.quality] ?: 0
+                }.thenByDescending { it.second.installedBytes }
+                    .thenBy { it.first.descriptorId }
+        }
+    val best = candidates.sortedWith(ranking).first()
     val (model, descriptor) = best
     val measured =
         benchmarkRecords
