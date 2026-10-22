@@ -1915,6 +1915,8 @@ private fun Models(
         .observeRunState()
         .collectAsStateWithLifecycle(BenchmarkRunState())
     val controller = uiModel.benchmarkController
+    val comparisonHardware = remember(context) { AndroidHardwareProfile.read(context) }
+    var comparisonError by remember { mutableStateOf<String?>(null) }
     var actionModelId by remember { mutableStateOf<String?>(null) }
     var actionError by remember { mutableStateOf<String?>(null) }
     val pendingDownloads = uiModel.pendingModelDownloads
@@ -1936,6 +1938,54 @@ private fun Models(
     }
 
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        item {
+            BenchmarkComparisonPanel(
+                records = benchmarks,
+                installed = installed.filter { model ->
+                    catalog.any {
+                        it.id == model.descriptorId && it.kind == ModelKind.TRANSCRIPTION
+                    }
+                },
+                deviceId = comparisonHardware.deviceId,
+                selectedIds = savedUi.selectedBenchmarkModels,
+                onSelected = uiModel::setSelectedBenchmarkModels,
+                busy = controller.isBusy,
+                runState = runState,
+                elapsedMs = testElapsed,
+                onCompare = {
+                    comparisonError = null
+                    controller.start("comparison") {
+                        val selected =
+                            installed.filter {
+                                it.descriptorId in savedUi.selectedBenchmarkModels &&
+                                    catalog.any { descriptor ->
+                                        descriptor.id == it.descriptorId &&
+                                            descriptor.kind == ModelKind.TRANSCRIPTION
+                                    }
+                            }.distinctBy { it.descriptorId }
+                        if (selected.size >= 2) {
+                            try {
+                                graph.benchmark.benchmarkSelected(
+                                    selected,
+                                    comparisonInferenceConfig(),
+                                    "english_jfk_37s",
+                                    comparisonHardware,
+                                )
+                            } catch (cancelled: CancellationException) {
+                                throw cancelled
+                            } catch (_: Exception) {
+                                comparisonError =
+                                    "Не удалось завершить сравнение. Успешные тесты сохранены."
+                            }
+                        }
+                    }
+                },
+                onCancel = controller::cancel,
+            )
+            comparisonError?.let {
+                Text(it, color = MaterialTheme.colorScheme.error)
+            }
+        }
         items(catalog.filter { it.kind == ModelKind.TRANSCRIPTION }, key = { it.id }) { model ->
             val saved = installed.firstOrNull { it.descriptorId == model.id }
             val download = downloads.firstOrNull { it.modelId == model.id }
@@ -2115,7 +2165,18 @@ private fun Models(
                             }
                         Text(
                             "Скорость: " + "%.1f".format(result.realTimeMultiplier) +
-                                "× · " + speedDescription,
+                                "× · " + speedDescription +
+                                " · RTF " + "%.2f".format(result.realTimeFactor),
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        Text(
+                            "WER: " +
+                                (result.wordErrorRate?.let { "%.1f".format(it * 100) + "%" }
+                                    ?: "не измерен") +
+                                " · Память: " +
+                                (result.approximatePeakMemoryBytes?.let {
+                                    (it / 1_048_576).toString() + " МБ"
+                                } ?: "нет данных"),
                             style = MaterialTheme.typography.bodySmall,
                         )
                     }
