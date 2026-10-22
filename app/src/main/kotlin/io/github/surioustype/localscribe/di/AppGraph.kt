@@ -22,6 +22,7 @@ import io.github.surioustype.localscribe.models.InstalledModelFileStore
 import io.github.surioustype.localscribe.models.JsonModelCatalogRepository
 import io.github.surioustype.localscribe.models.SecureModelDownloadManager
 import io.github.surioustype.localscribe.network.HttpsNetworkClient
+import io.github.surioustype.localscribe.service.DurableQueuePriorities
 import io.github.surioustype.localscribe.service.ServiceDependencies
 import io.github.surioustype.localscribe.updates.createAppUpdateManager
 import kotlinx.coroutines.CoroutineScope
@@ -40,6 +41,7 @@ class AppGraph(context: Context) {
     private val recoveryMutex = Mutex()
     private var recovered = false
     val database = LocalScribeDatabase.open(appContext)
+    val queuePriorities = DurableQueuePriorities(appContext)
     val transcriptionRepository = RoomTranscriptionRepository(database)
     val transcriptSearch = database.transcriptionDao().observeSearchSegments()
     private val sourceStore = RoomAudioSourceStore(database)
@@ -105,6 +107,7 @@ class AppGraph(context: Context) {
     val serviceDependencies =
         object : ServiceDependencies {
             override val coordinator = this@AppGraph.coordinator
+            override val queuePriorities = this@AppGraph.queuePriorities
             override val repository = this@AppGraph.transcriptionRepository
             override val audioRepository = this@AppGraph.audioRepository
             override val thermalMonitor = this@AppGraph.thermalMonitor
