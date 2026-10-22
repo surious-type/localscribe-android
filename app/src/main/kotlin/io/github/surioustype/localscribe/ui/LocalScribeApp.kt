@@ -822,6 +822,12 @@ private fun SourceControls(
     val installedModelIds = transcriptionModels.map { it.descriptorId }.distinct()
     val vadModels = installedModels.filter { it.descriptorId == "silero-v6.2.0" }
     val catalog by graph.catalog.observeCatalog().collectAsStateWithLifecycle(emptyList())
+    val vadDownloads by graph.downloads.observeDownloads()
+        .collectAsStateWithLifecycle(emptyList())
+    val vadDescriptor = catalog.firstOrNull { it.kind == ModelKind.VAD }
+    val vadDownload = vadDownloads.firstOrNull { it.modelId == vadDescriptor?.id }
+    val vadInstalled = vadModels.isNotEmpty()
+    var vadMessage by remember { mutableStateOf<String?>(null) }
     val measurements by graph.benchmark.observeBenchmarks()
         .collectAsStateWithLifecycle(emptyList())
     val hardware = remember(context) { AndroidHardwareProfile.read(context) }
@@ -1078,36 +1084,102 @@ private fun SourceControls(
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Card(colors = localScribeCardColors(), shape = localScribeShape) {
-            Row(
+            Column(
                 Modifier.fillMaxWidth().padding(16.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
-                Column(Modifier.weight(1f)) {
-                    Text("Определение речи (VAD)")
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text("Пропускать тишину", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            "Может уменьшить ложный текст на паузах. " +
+                                "Иногда пропускает тихие слова и добавляет время обработки.",
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                    Switch(
+                        checked = selectedVad != null,
+                        onCheckedChange = { enabled ->
+                            uiModel.setSourceSetup(
+                                selectedModel,
+                                language,
+                                null,
+                                if (enabled) vadDescriptor?.id ?: "silero-v6.2.0" else "disabled",
+                            )
+                        },
+                    )
+                }
+                Text(
+                    "Этапы: обнаружение речи (Silero) → распознавание Whisper → " +
+                        "сохранение фрагментов. Аудио обрабатывается локально.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                val transfer =
+                    modelCardPresentation(
+                        installed = vadInstalled,
+                        downloadStatus = vadDownload?.status?.name,
+                    )
+                Text(
+                    "Компонент Silero VAD: " + transfer.statusLabel,
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                if (selectedVad != null && !vadInstalled) {
                     Text(
-                        "Помогает пропускать тишину и уменьшать ложные фразы",
+                        "Для включения пропуска тишины нужен отдельный компонент. " +
+                            "Его скачивание требует интернет, распознавание остаётся локальным.",
+                        color = MaterialTheme.colorScheme.error,
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
-                Switch(
-                    checked = selectedVad != null,
-                    onCheckedChange = { enabled ->
-                        uiModel.setSourceSetup(
-                            selectedModel,
-                            language,
-                            null,
-                            if (enabled) vadModels.firstOrNull()?.descriptorId else "disabled",
+                if (vadDescriptor != null && !vadInstalled) {
+                    if (transfer.canDownload) {
+                        OutlinedButton(
+                            onClick = {
+                                vadMessage = null
+                                scope.launch {
+                                    runCatching {
+                                        if (vadDownload?.status?.name in
+                                            setOf("CANCELLED", "FAILED")
+                                        ) {
+                                            graph.downloads.retry(vadDescriptor.id)
+                                        } else {
+                                            graph.downloads.enqueue(vadDescriptor.id)
+                                        }
+                                    }.onFailure {
+                                        vadMessage = "Не удалось установить Silero VAD."
+                                    }
+                                }
+                            },
+                        ) { Text("Установить компонент Silero VAD") }
+                    }
+                    if (transfer.busy) {
+                        LocalScribeProgress(
+                            if (vadDownload?.status?.name == "DOWNLOADING") {
+                                vadDownload.downloadedBytes.toFloat() /
+                                    vadDownload.totalBytes.coerceAtLeast(1L).toFloat()
+                            } else {
+                                null
+                            },
                         )
-                    },
-                    enabled = vadModels.isNotEmpty(),
-                )
+                        Text(
+                            when (vadDownload?.status?.name) {
+                                "QUEUED" -> "Этап: ожидание скачивания"
+                                "DOWNLOADING" -> "Этап: скачивание компонента"
+                                "VERIFYING" -> "Этап: проверка целостности модели"
+                                else -> "Этап: подготовка установки"
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        OutlinedButton(
+                            onClick = { scope.launch { graph.downloads.cancel(vadDescriptor.id) } },
+                        ) { Text("Отменить установку") }
+                    }
+                }
+                vadMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
-        }
-        if (vadModels.isEmpty()) {
-            Text(
-                "Для определения речи можно скачать Silero VAD во вкладке «Модели».",
-                style = MaterialTheme.typography.bodySmall,
-            )
         }
         Button(
             onClick = {
@@ -1122,7 +1194,9 @@ private fun SourceControls(
                     beginTranscription()
                 }
             },
-            enabled = selectedModel != null,
+            enabled =
+                selectedModel != null &&
+                    (selectedVad == null || vadInstalled),
             modifier = Modifier.fillMaxWidth(),
         ) {
             Text("Начать транскрибацию")
