@@ -32,27 +32,29 @@ internal fun TranscriptContinuousParagraph(
     onSeek: () -> Unit,
 ) {
     val highlight = MaterialTheme.colorScheme.secondaryContainer
-    val markedText = remember(segment.text, query, highlight) { buildAnnotatedString {
-        val phrase = query.trim()
-        if (phrase.isEmpty()) {
-            append(segment.text)
-        } else {
-            var cursor = 0
-            while (cursor < segment.text.length) {
-                val index = segment.text.indexOf(phrase, cursor, ignoreCase = true)
-                if (index == -1) {
-                    append(segment.text.substring(cursor))
-                    break
+    val markedText =
+        remember(segment.text, query, highlight) {
+            buildAnnotatedString {
+                val phrase = query.trim()
+                if (phrase.isEmpty()) {
+                    append(segment.text)
+                } else {
+                    var cursor = 0
+                    while (cursor < segment.text.length) {
+                        val index = segment.text.indexOf(phrase, cursor, ignoreCase = true)
+                        if (index == -1) {
+                            append(segment.text.substring(cursor))
+                            break
+                        }
+                        append(segment.text.substring(cursor, index))
+                        withStyle(SpanStyle(background = highlight)) {
+                            append(segment.text.substring(index, index + phrase.length))
+                        }
+                        cursor = index + phrase.length
+                    }
                 }
-                append(segment.text.substring(cursor, index))
-                withStyle(SpanStyle(background = highlight)) {
-                    append(segment.text.substring(index, index + phrase.length))
-                }
-                cursor = index + phrase.length
             }
         }
-    }
-    }
     SelectionContainer {
         Text(
             text = markedText,
