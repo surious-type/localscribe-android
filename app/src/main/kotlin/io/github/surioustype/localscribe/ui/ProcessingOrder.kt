@@ -1,6 +1,5 @@
 package io.github.surioustype.localscribe.ui
 
-import io.github.surioustype.localscribe.core.model.JobStatus
 import io.github.surioustype.localscribe.core.model.TranscriptionJob
 
 /**
