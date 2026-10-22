@@ -843,6 +843,9 @@ private fun SourceControls(
     val selectedModel =
         savedUi.sourceModelId ?: recommendation.model?.descriptorId
             ?: installedModelIds.firstOrNull()
+    val customModelSelected =
+        savedUi.sourceModelId != null &&
+            savedUi.sourceModelId != recommendation.model?.descriptorId
     // Prefer speech detection whenever its tiny model is installed; keep explicit opt-out.
     val selectedVad =
         when (savedUi.sourceVadModelId) {
@@ -1001,7 +1004,7 @@ private fun SourceControls(
         ) {
             RecognitionProfile.entries.forEach { option ->
                 FilterChip(
-                    selected = profile == option,
+                    selected = profile == option && !customModelSelected,
                     onClick = {
                         chosenProfile = option.name
                         val suggested =
@@ -1020,6 +1023,12 @@ private fun SourceControls(
         }
         Text(profile.explanation, style = MaterialTheme.typography.bodySmall)
         Text(recommendation.reason, style = MaterialTheme.typography.bodySmall)
+        if (customModelSelected) {
+            Text(
+                "Модель выбрана вручную; профиль не применяется.",
+                style = MaterialTheme.typography.labelMedium,
+            )
+        }
         Text(
             "Выбранная модель: " +
                 (transcriptionModels.firstOrNull { it.descriptorId == selectedModel }
@@ -2204,7 +2213,14 @@ private fun Models(
                 }
             }
         }
-        item { Text("Подавление тишины", style = MaterialTheme.typography.titleMedium) }
+        item {
+            Text("Пропускать тишину · компонент", style = MaterialTheme.typography.titleMedium)
+            Text(
+                "Silero VAD нужен только при включённом пропуске тишины. " +
+                    "Он определяет речь, но иногда пропускает тихие слова.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+        }
         items(catalog.filter { it.kind == ModelKind.VAD }, key = { "vad-" + it.id }) { model ->
             val saved = installed.firstOrNull { it.descriptorId == model.id }
             val download = downloads.firstOrNull { it.modelId == model.id }
