@@ -44,7 +44,7 @@ class LiveTranscriptStore {
         chunk: TranscriptionChunk,
         segment: EngineSegment,
     ) {
-        if (segment.text.isBlank()) return
+        if (chunk.jobId != jobId || segment.text.isBlank()) return
         val duration = (chunk.endMs - chunk.startMs).coerceAtLeast(0L)
         val start = segment.startMs.coerceIn(0L, duration)
         val end = segment.endMs.coerceIn(0L, duration)
