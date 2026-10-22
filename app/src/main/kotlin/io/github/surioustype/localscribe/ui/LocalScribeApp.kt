@@ -1148,6 +1148,7 @@ private fun JobRow(
     context: Context,
     showTranscript: () -> Unit,
     sourceName: String? = null,
+    queuePosition: Int? = null,
 ) {
     val scope = rememberCoroutineScope()
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -1162,6 +1163,25 @@ private fun JobRow(
             job.id,
         ).collectAsStateWithLifecycle(emptyList())
     var actionMessage by remember { mutableStateOf<String?>(null) }
+    val priorities by graph.queuePriorities.priorities.collectAsStateWithLifecycle()
+    val priority = priorities[job.id] ?: QueuePriority.NORMAL
+    fun controlAction(action: String) {
+        runCatching {
+            context.startService(
+                Intent(context, TranscriptionService::class.java)
+                    .setAction(action)
+                    .putExtra(TranscriptionService.EXTRA_JOB_ID, job.id),
+            )
+        }.onFailure {
+            scope.launch {
+                if (action == TranscriptionService.ACTION_PAUSE) {
+                    graph.coordinator.pause(job.id)
+                } else {
+                    graph.coordinator.cancel(job.id)
+                }
+            }
+        }
+    }
     val relinkAudio =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let {
@@ -1236,23 +1256,54 @@ private fun JobRow(
                     " / " + formatAudioDuration(totalDuration),
                 style = MaterialTheme.typography.bodySmall,
             )
-            if (savedSegments.isNotEmpty() || previewSegments.isNotEmpty()) {
+            if (savedSegments.isNotEmpty()) {
+                Text("Сохранённый текст", style = MaterialTheme.typography.labelMedium)
                 Text(
-                    if (previewSegments.isNotEmpty()) {
-                        "Текст появляется в реальном времени"
-                    } else {
-                        "Уже распознано"
-                    },
+                    savedSegments.takeLast(2).joinToString(" ") { it.text },
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (job.status == JobStatus.RUNNING && previewSegments.isNotEmpty()) {
+                Text(
+                    "Предварительный текст Whisper · ещё не сохранён",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    (savedSegments.takeLast(2) + previewSegments)
-                        .takeLast(4)
-                        .joinToString(" ") { it.text },
-                    maxLines = 5,
+                    previewSegments.takeLast(3).joinToString(" ") { it.text },
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+            }
+            if (job.status == JobStatus.PENDING) {
+                Text(
+                    "Ожидает в очереди · №" + (queuePosition ?: "…"),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(QueuePriority.entries) { option ->
+                        FilterChip(
+                            selected = priority == option,
+                            label = { Text(option.label) },
+                            onClick = {
+                                runCatching {
+                                    graph.queuePriorities.set(job.id, option)
+                                    ContextCompat.startForegroundService(
+                                        context,
+                                        Intent(context, TranscriptionService::class.java)
+                                            .setAction(TranscriptionService.ACTION_REORDER)
+                                            .putExtra(TranscriptionService.EXTRA_JOB_ID, job.id),
+                                    )
+                                }.onFailure {
+                                    actionMessage =
+                                        "Приоритет сохранён, но очередь не удалось обновить."
+                                }
+                            },
+                        )
+                    }
+                }
             }
             job.failure?.let {
                 Text(
@@ -1265,11 +1316,9 @@ private fun JobRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (job.status ==
-                    JobStatus.RUNNING
-                ) {
+                if (job.status == JobStatus.RUNNING || job.status == JobStatus.PENDING) {
                     IconButton(
-                        onClick = { scope.launch { graph.coordinator.pause(job.id) } },
+                        onClick = { controlAction(TranscriptionService.ACTION_PAUSE) },
                     ) {
                         Icon(Icons.Default.Pause, contentDescription = "Приостановить обработку")
                     }
@@ -1327,7 +1376,7 @@ private fun JobRow(
                 }
                 if (job.status in setOf(JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED)) {
                     IconButton(
-                        onClick = { scope.launch { graph.coordinator.cancel(job.id) } },
+                        onClick = { controlAction(TranscriptionService.ACTION_STOP) },
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Остановить обработку")
                     }
@@ -1349,6 +1398,16 @@ private fun JobRow(
                 OutlinedButton(onClick = { relinkAudio.launch(arrayOf("audio/*")) }) {
                     Text("Восстановить доступ к записи")
                 }
+            }
+            if (job.status == JobStatus.PAUSED &&
+                job.failure?.code?.name in
+                setOf("MODEL_CORRUPTED", "MODEL_CHECKSUM_MISMATCH")
+            ) {
+                Text(
+                    "Восстановите исходную модель с тем же хешем во вкладке «Модели». " +
+                        "Другая версия модели требует нового распознавания.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
             }
             actionMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         }
