@@ -14,15 +14,17 @@ class TranscriptionVersionPreferences(context: Context) {
             Context.MODE_PRIVATE,
         )
 
-    private val selected = MutableStateFlow(
-        storage.all.mapNotNull { (key, value) ->
-            if (key.startsWith(PREFIX) && value is String) {
-                key.removePrefix(PREFIX) to value
-            } else {
-                null
-            }
-        }.toMap(),
-    )
+    private val selected =
+        MutableStateFlow(
+            storage.all
+                .mapNotNull { (key, value) ->
+                    if (key.startsWith(PREFIX) && value is String) {
+                        key.removePrefix(PREFIX) to value
+                    } else {
+                        null
+                    }
+                }.toMap(),
+        )
 
     val selectedVersions: StateFlow<Map<String, String>> = selected.asStateFlow()
 
