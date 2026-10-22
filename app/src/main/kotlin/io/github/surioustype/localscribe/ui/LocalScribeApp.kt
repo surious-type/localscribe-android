@@ -839,6 +839,7 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
                 showTranscript = { uiModel.showTranscript(job.id) },
                 onOpenModels = { uiModel.selectDestination(Destination.MODELS.name) },
                 queuePosition = positions[job.id],
+                hasActiveExecution = jobs.any { it.status == JobStatus.RUNNING },
             )
         }
     }
@@ -1163,6 +1164,7 @@ private fun JobRow(
     onOpenModels: () -> Unit,
     sourceName: String? = null,
     queuePosition: Int? = null,
+    hasActiveExecution: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -1305,15 +1307,24 @@ private fun JobRow(
                             onClick = {
                                 runCatching {
                                     graph.queuePriorities.set(job.id, option)
-                                    ContextCompat.startForegroundService(
-                                        context,
-                                        Intent(context, TranscriptionService::class.java)
-                                            .setAction(TranscriptionService.ACTION_REORDER)
-                                            .putExtra(TranscriptionService.EXTRA_JOB_ID, job.id),
-                                    )
+                                }.onSuccess {
+                                    if (hasActiveExecution) {
+                                        runCatching {
+                                            ContextCompat.startForegroundService(
+                                                context,
+                                                Intent(context, TranscriptionService::class.java)
+                                                    .setAction(TranscriptionService.ACTION_REORDER)
+                                                    .putExtra(
+                                                        TranscriptionService.EXTRA_JOB_ID,
+                                                        job.id,
+                                                    ),
+                                            )
+                                        }.onFailure {
+                                            actionMessage = "Очередь обновится при следующем запуске."
+                                        }
+                                    }
                                 }.onFailure {
-                                    actionMessage =
-                                        "Приоритет сохранён, но очередь не удалось обновить."
+                                    actionMessage = "Не удалось сохранить приоритет."
                                 }
                             },
                         )
