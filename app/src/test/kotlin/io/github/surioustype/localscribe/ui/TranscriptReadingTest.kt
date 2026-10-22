@@ -6,7 +6,9 @@ import io.github.surioustype.localscribe.core.model.TranscriptSegment
 import io.github.surioustype.localscribe.core.model.TranscriptionConfig
 import io.github.surioustype.localscribe.core.model.TranscriptionJob
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class TranscriptReadingTest {
@@ -64,6 +66,14 @@ class TranscriptReadingTest {
         assertEquals("Сохранённый старый текст", diff.single().before)
         assertEquals("Новый текст", diff.single().after)
         assertEquals("Сохранённый старый текст", original.single().text)
+    }
+
+    @Test
+    fun autoplayFollowRequiresActualPlaybackAndActiveSegment() {
+        assertFalse(shouldAutoFollowTranscript(true, false, 0))
+        assertFalse(shouldAutoFollowTranscript(true, true, null))
+        assertFalse(shouldAutoFollowTranscript(false, true, 3))
+        assertTrue(shouldAutoFollowTranscript(true, true, 3))
     }
 
     @Test
