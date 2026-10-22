@@ -1580,17 +1580,21 @@ private fun TranscriptScreen(
                 )
             }
             item {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    FilterChip(
-                        selected = readerMode == TranscriptReadingMode.CONTINUOUS,
-                        onClick = { setReadingMode(TranscriptReadingMode.CONTINUOUS) },
-                        label = { Text("Сплошной текст") },
-                    )
-                    FilterChip(
-                        selected = readerMode == TranscriptReadingMode.TIMECODES,
-                        onClick = { setReadingMode(TranscriptReadingMode.TIMECODES) },
-                        label = { Text("С таймкодами") },
-                    )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        FilterChip(
+                            selected = readerMode == TranscriptReadingMode.CONTINUOUS,
+                            onClick = { setReadingMode(TranscriptReadingMode.CONTINUOUS) },
+                            label = { Text("Сплошной текст") },
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = readerMode == TranscriptReadingMode.TIMECODES,
+                            onClick = { setReadingMode(TranscriptReadingMode.TIMECODES) },
+                            label = { Text("С таймкодами") },
+                        )
+                    }
                 }
             }
             item {
