@@ -230,6 +230,8 @@ class AndroidBenchmarkManager(
                 }
                 samples += sampler.snapshot()
                 val timing = BenchmarkCalculator.calculate(audioDurationMs, processingDurationMs)
+                val quality =
+                    QualityMetrics.calculate(sample.referenceTranscript, recognizedText)
                 val record =
                     BenchmarkRecord(
                         UUID.randomUUID().toString(),
@@ -245,6 +247,8 @@ class AndroidBenchmarkManager(
                         samples.mapNotNull(BenchmarkSample::memoryBytes).maxOrNull(),
                         clock.epochMs(),
                         sample.id,
+                        quality.wordErrorRate,
+                        quality.characterErrorRate,
                     )
                 completed = CompletedBenchmark(sample, recognizedText, record)
             } catch (error: Throwable) {
@@ -326,14 +330,38 @@ class AndroidBenchmarkManager(
 }
 
 object BenchmarkComparisons {
+    /** Repetitions of one exact model on the same device and identical inference setup. */
     fun compatibleWith(reference: BenchmarkRecord, candidates: List<BenchmarkRecord>) =
         candidates.filter {
-            it.deviceId ==
-                reference.deviceId &&
+            it.deviceId == reference.deviceId &&
                 it.modelHash == reference.modelHash &&
-                it.sampleId == reference.sampleId &&
-                it.config == reference.config
+                sameTestConditions(reference, it)
         }
+
+    /**
+     * Cross-model comparisons intentionally ignore model ID and hash.
+     * The common sample, device, duration, language, VAD, threads and temperature must match.
+     */
+    fun sameTestConditions(left: BenchmarkRecord, right: BenchmarkRecord): Boolean =
+        left.deviceId == right.deviceId &&
+            left.sampleId == right.sampleId &&
+            left.sampleId != "unspecified" &&
+            left.audioDurationMs == right.audioDurationMs &&
+            left.config == right.config
+
+    fun comparableModels(
+        reference: BenchmarkRecord,
+        candidates: List<BenchmarkRecord>,
+    ): List<BenchmarkRecord> =
+        candidates
+            .filter { sameTestConditions(reference, it) }
+            .groupBy { it.modelId to it.modelHash }
+            .values
+            .mapNotNull { revisions ->
+                revisions.maxWithOrNull(
+                    compareBy<BenchmarkRecord> { it.createdAtEpochMs }.thenBy { it.id },
+                )
+            }.sortedWith(compareBy<BenchmarkRecord> { it.realTimeFactor }.thenBy { it.modelId })
 }
 
 private fun Throwable.toBenchmarkFailure(): DomainFailure =
