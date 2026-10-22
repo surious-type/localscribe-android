@@ -12,8 +12,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.semantics
-import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -55,20 +53,17 @@ internal fun TranscriptContinuousParagraph(
                 }
             }
         }
+    val surfaceColor =
+        if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent
+    val seekLabel = "Перейти к аудио: " + segment.absoluteStartMs / 1_000L + " с"
     SelectionContainer {
         Text(
             text = markedText,
             modifier =
                 Modifier
                     .fillMaxWidth()
-                    .background(
-                        if (active) MaterialTheme.colorScheme.primaryContainer else Color.Transparent,
-                        RoundedCornerShape(8.dp),
-                    )
-                    .semantics {
-                        stateDescription = "Фрагмент с " + segment.absoluteStartMs / 1_000L + " секунды"
-                    }
-                    .clickable(onClickLabel = "Перейти к этому месту аудио") { onSeek() }
+                    .background(surfaceColor, RoundedCornerShape(8.dp))
+                    .clickable(onClickLabel = seekLabel) { onSeek() }
                     .padding(horizontal = 12.dp, vertical = 3.dp),
             style = MaterialTheme.typography.bodyLarge,
             color = MaterialTheme.colorScheme.onSurface,
