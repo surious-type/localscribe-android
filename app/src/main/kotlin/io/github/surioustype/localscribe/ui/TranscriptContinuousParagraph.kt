@@ -12,8 +12,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.withStyle
@@ -66,7 +66,7 @@ internal fun TranscriptContinuousParagraph(
                         RoundedCornerShape(8.dp),
                     )
                     .semantics {
-                        contentDescription = "Текст с " + segment.absoluteStartMs / 1_000L + " секунды"
+                        stateDescription = "Фрагмент с " + segment.absoluteStartMs / 1_000L + " секунды"
                     }
                     .clickable(onClickLabel = "Перейти к этому месту аудио") { onSeek() }
                     .padding(horizontal = 12.dp, vertical = 3.dp),
