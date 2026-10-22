@@ -68,11 +68,10 @@ class TranscriptionService : Service() {
                 execute = { jobId ->
                     val status = dependencies.repository.getJob(jobId)?.status
                     val explicitlyResumed = manualResumeIds.remove(jobId)
-                    if (
-                        status == JobStatus.PENDING ||
-                        (status in setOf(JobStatus.PAUSED, JobStatus.FAILED) &&
-                            explicitlyResumed)
-                    ) {
+                    val canResume =
+                        (status == JobStatus.PAUSED || status == JobStatus.FAILED) &&
+                            explicitlyResumed
+                    if (status == JobStatus.PENDING || canResume) {
                         dependencies.coordinator.execute(jobId)
                     }
                 },
@@ -151,9 +150,11 @@ class TranscriptionService : Service() {
     private suspend fun rebuildQueue(startId: Int) {
         val jobs = dependencies.repository.observeJobs().first()
         val resumable =
-            jobs.filter {
-                it.status == JobStatus.PAUSED || it.status == JobStatus.FAILED
-            }.map { it.id }.toSet()
+            jobs
+                .filter {
+                    it.status == JobStatus.PAUSED || it.status == JobStatus.FAILED
+                }.map { it.id }
+                .toSet()
         manualResumeIds.retainAll(resumable)
         val eligible =
             jobs.filter { it.status == JobStatus.PENDING || it.id in manualResumeIds }
