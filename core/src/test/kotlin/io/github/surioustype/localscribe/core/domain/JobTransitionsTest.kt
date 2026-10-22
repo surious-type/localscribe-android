@@ -10,6 +10,7 @@ class JobTransitionsTest {
     @Test
     fun `job lifecycle permits start pause resume completion and cancellation`() {
         assertTrue(JobTransitions.canTransition(JobStatus.PENDING, JobStatus.RUNNING))
+        assertTrue(JobTransitions.canTransition(JobStatus.PENDING, JobStatus.PAUSED))
         assertTrue(JobTransitions.canTransition(JobStatus.RUNNING, JobStatus.PAUSED))
         assertTrue(JobTransitions.canTransition(JobStatus.PAUSED, JobStatus.RUNNING))
         assertTrue(JobTransitions.canTransition(JobStatus.RUNNING, JobStatus.COMPLETED))
