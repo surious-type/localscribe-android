@@ -12,7 +12,7 @@ object JobTransitions {
 
     private val JOB_TRANSITIONS =
         mapOf(
-            JobStatus.PENDING to setOf(JobStatus.RUNNING, JobStatus.CANCELLED),
+            JobStatus.PENDING to setOf(JobStatus.RUNNING, JobStatus.PAUSED, JobStatus.CANCELLED),
             JobStatus.RUNNING to
                 setOf(JobStatus.PAUSED, JobStatus.CANCELLED, JobStatus.FAILED, JobStatus.COMPLETED),
             JobStatus.PAUSED to setOf(JobStatus.RUNNING, JobStatus.CANCELLED),
