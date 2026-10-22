@@ -1374,6 +1374,10 @@ private fun TranscriptScreen(
         .observeJobs()
         .collectAsStateWithLifecycle(emptyList())
     val versions = completedTranscriptionVersions(allJobs, job?.sourceId.orEmpty())
+    val primaryVersions by graph.transcriptVersions.selectedVersions.collectAsStateWithLifecycle()
+    val readerMode = runCatching {
+        TranscriptReadingMode.valueOf(readingMode)
+    }.getOrDefault(TranscriptReadingMode.TIMECODES)
     var showVersions by remember { mutableStateOf(false) }
     var sourceUri by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(job?.sourceId) {
@@ -1488,17 +1492,9 @@ private fun TranscriptScreen(
             visibleSegments.filter { it.text.contains(query, ignoreCase = true) }
         }
     val transcriptListState = rememberLazyListState()
-    val versionHeader =
-        if (
-            versions.size > 1 ||
-            (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)
-        ) {
-            1
-        } else {
-            0
-        }
+    val versionHeader = if (versions.isNotEmpty()) 1 else 0
     val rerunHeader = if (job?.status == JobStatus.COMPLETED) 1 else 0
-    val transcriptRowOffset = versionHeader + rerunHeader + 2
+    val transcriptRowOffset = versionHeader + rerunHeader + 3
     val activeIndex =
         remember(filtered, playback.positionMs) {
             activeTranscriptSegmentIndex(filtered, playback.positionMs)
@@ -1546,42 +1542,19 @@ private fun TranscriptScreen(
             modifier = Modifier.weight(1f),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            // A running rerun still lets the user open an earlier completed transcript.
-            if (versions.size > 1 ||
-                (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)
-            ) {
+            // Completed attempts survive newer running or failed reruns.
+            if (versions.isNotEmpty()) {
                 item {
-                    Box {
-                        OutlinedButton(onClick = { showVersions = true }) {
-                            Text(
-                                "Версия: " + (job?.config?.modelId ?: "") + " · " +
-                                    formatLocalDate(
-                                        job?.completedAtEpochMs ?: job?.updatedAtEpochMs ?: 0L,
-                                    ),
-                            )
-                        }
-                        androidx.compose.material3.DropdownMenu(
-                            expanded = showVersions,
-                            onDismissRequest = { showVersions = false },
-                        ) {
-                            versions.forEach { version ->
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            version.config.modelId + " · " +
-                                                formatLocalDate(
-                                                    version.completedAtEpochMs
-                                                        ?: version.updatedAtEpochMs,
-                                                ),
-                                        )
-                                    },
-                                    onClick = {
-                                        showVersions = false
-                                        onChooseVersion(version.id)
-                                    },
-                                )
-                            }
-                        }
+                    OutlinedButton(onClick = { showVersions = true }) {
+                        Text(
+                            "Версии и сравнение · " + versions.size +
+                                if (preferredCompletedTranscript(
+                                        versions,
+                                        job?.sourceId.orEmpty(),
+                                        primaryVersions[job?.sourceId.orEmpty()],
+                                    )?.id == jobId
+                                ) " · Основная" else "",
+                        )
                     }
                 }
             }
@@ -1594,6 +1567,20 @@ private fun TranscriptScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
                 )
+            }
+            item {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = readerMode == TranscriptReadingMode.CONTINUOUS,
+                        onClick = { setReadingMode(TranscriptReadingMode.CONTINUOUS) },
+                        label = { Text("Сплошной текст") },
+                    )
+                    FilterChip(
+                        selected = readerMode == TranscriptReadingMode.TIMECODES,
+                        onClick = { setReadingMode(TranscriptReadingMode.TIMECODES) },
+                        label = { Text("С таймкодами") },
+                    )
+                }
             }
             item {
                 Row(
@@ -1653,7 +1640,7 @@ private fun TranscriptScreen(
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Распознать заново")
+                        Text("Настроить повторное распознавание")
                     }
                 }
             }
