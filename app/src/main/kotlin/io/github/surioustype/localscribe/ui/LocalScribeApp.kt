@@ -75,6 +75,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -1564,6 +1565,22 @@ private fun TranscriptScreen(
             if (!scrolling && !pendingReadingRestore && filtered.isNotEmpty()) {
                 val segment = filtered.getOrNull(index - transcriptRowOffset)
                 readingPositionStore.save(jobId, segment?.id, offset)
+            }
+        }
+    }
+    val latestFiltered by rememberUpdatedState(filtered)
+    val latestRowOffset by rememberUpdatedState(transcriptRowOffset)
+    val readingPositionReady by rememberUpdatedState(!pendingReadingRestore)
+    DisposableEffect(jobId, transcriptListState) {
+        onDispose {
+            if (readingPositionReady && latestFiltered.isNotEmpty()) {
+                val index = transcriptListState.firstVisibleItemIndex - latestRowOffset
+                val segmentId = latestFiltered.getOrNull(index)?.id
+                readingPositionStore.save(
+                    jobId,
+                    segmentId,
+                    transcriptListState.firstVisibleItemScrollOffset,
+                )
             }
         }
     }
