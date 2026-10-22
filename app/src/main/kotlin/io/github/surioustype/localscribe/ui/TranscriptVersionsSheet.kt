@@ -57,8 +57,12 @@ internal fun TranscriptVersionsSheet(
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
                 items(versions, key = { it.id }) { version ->
-                    val isPrimary = preferredCompletedTranscript(versions, current.sourceId, primaryId)
-                        ?.id == version.id
+                    val isPrimary =
+                        preferredCompletedTranscript(
+                            versions,
+                            current.sourceId,
+                            primaryId,
+                        )?.id == version.id
                     Card(modifier = Modifier.fillMaxWidth()) {
                         Column(
                             modifier = Modifier.fillMaxWidth().padding(14.dp),
@@ -154,11 +158,12 @@ private fun TranscriptVersionComparisonDialog(
     val rightSegments by remember(right.id) {
         graph.transcriptionRepository.observeSegments(right.id)
     }.collectAsStateWithLifecycle(emptyList())
-    val changes = remember(leftChunks, leftSegments, rightChunks, rightSegments) {
-        val before = TranscriptAssembler().assemble(leftChunks, leftSegments)
-        val after = TranscriptAssembler().assemble(rightChunks, rightSegments)
-        compareTranscriptVersions(before, after)
-    }
+    val changes =
+        remember(leftChunks, leftSegments, rightChunks, rightSegments) {
+            val before = TranscriptAssembler().assemble(leftChunks, leftSegments)
+            val after = TranscriptAssembler().assemble(rightChunks, rightSegments)
+            compareTranscriptVersions(before, after)
+        }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Сравнение версий") },
