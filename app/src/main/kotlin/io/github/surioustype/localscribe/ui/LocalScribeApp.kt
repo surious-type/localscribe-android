@@ -1314,9 +1314,14 @@ private fun JobRow(
                     }
                 }
             }
-            job.failure?.let {
+            job.failure?.let { failure ->
                 Text(
-                    userFacingFailure(it.code.name),
+                    if (failure.diagnostic == "source_identity_changed") {
+                        "Аудиофайл изменился. Готовые фрагменты сохранены. " +
+                            "Выберите оригинал или создайте новую задачу для другой записи."
+                    } else {
+                        userFacingFailure(failure.code.name)
+                    },
                     color = MaterialTheme.colorScheme.error,
                 )
             }
@@ -1390,7 +1395,7 @@ private fun JobRow(
                         Icon(Icons.Default.Close, contentDescription = "Остановить обработку")
                     }
                 }
-                if (job.status in setOf(JobStatus.COMPLETED, JobStatus.RUNNING, JobStatus.PAUSED)) {
+                if (job.status == JobStatus.COMPLETED || savedSegments.isNotEmpty()) {
                     IconButton(onClick = showTranscript) {
                         Icon(Icons.Default.Description, contentDescription = "Открыть текст")
                     }
