@@ -1541,12 +1541,13 @@ private fun TranscriptScreen(
                 if (position != null && (position.segmentId == null || segmentIndex >= 0)) {
                     programmaticScroll = true
                     try {
-                        transcriptListState.scrollToItem(
-                            if (position.segmentId == null) 0 else {
+                        val targetIndex =
+                            if (position.segmentId == null) {
+                                0
+                            } else {
                                 segmentIndex + transcriptRowOffset
-                            },
-                            position.offsetPx,
-                        )
+                            }
+                        transcriptListState.scrollToItem(targetIndex, position.offsetPx)
                     } finally {
                         programmaticScroll = false
                     }
