@@ -115,6 +115,8 @@ import io.github.surioustype.localscribe.core.model.UpdateAvailability
 import io.github.surioustype.localscribe.core.model.VadConfig
 import io.github.surioustype.localscribe.di.AppGraph
 import io.github.surioustype.localscribe.di.AppPreferences
+import io.github.surioustype.localscribe.service.QueuePriority
+import io.github.surioustype.localscribe.service.pendingTranscriptionQueue
 import io.github.surioustype.localscribe.service.TranscriptionService
 import io.github.surioustype.localscribe.ui.playback.AndroidMediaPlayerBackend
 import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackController
@@ -186,11 +188,12 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
         val backgroundJobs by graph.transcriptionRepository
             .observeJobs()
             .collectAsStateWithLifecycle(emptyList())
+        val queuePriorities by graph.queuePriorities.priorities.collectAsStateWithLifecycle()
+        val waitingJobs = pendingTranscriptionQueue(backgroundJobs, queuePriorities)
         val activeJob =
             backgroundJobs.firstOrNull { it.status == JobStatus.RUNNING }
-                ?: backgroundJobs.firstOrNull {
-                    it.status == JobStatus.PENDING || it.status == JobStatus.PAUSED
-                }
+                ?: waitingJobs.firstOrNull()
+                ?: backgroundJobs.firstOrNull { it.status == JobStatus.PAUSED }
         BackHandler(enabled = uiModel.canNavigateBack()) {
             uiModel.navigateBack()
         }
@@ -225,33 +228,12 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                 if (!detail) {
                     Column {
                         if (activeJob != null) {
-                            Card(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                                        .clickable { uiModel.showProcessing(true) }
-                                        .semantics {
-                                            contentDescription = "Открыть очередь обработки"
-                                        },
-                                colors = localScribeCardColors(),
-                                shape = localScribeShape,
-                            ) {
-                                Column(
-                                    Modifier.padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    Text("Обработка · " + localizedJobStatus(activeJob.status.name))
-                                    Text(
-                                        "Модель: " + activeJob.config.modelId,
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                    Text(
-                                        "Нажмите, чтобы открыть очередь",
-                                        style = MaterialTheme.typography.labelSmall,
-                                    )
-                                }
-                            }
+                            QueueMiniPanel(
+                                activeJob = activeJob,
+                                graph = graph,
+                                waitingCount = waitingJobs.size,
+                                onOpenQueue = { uiModel.showProcessing(true) },
+                            )
                         }
                         NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
                             Destination.entries
@@ -770,10 +752,58 @@ private fun LibraryEmptyState(title: String, description: String) {
 }
 
 @Composable
+private fun QueueMiniPanel(
+    activeJob: TranscriptionJob,
+    graph: AppGraph,
+    waitingCount: Int,
+    onOpenQueue: () -> Unit,
+) {
+    val chunks by graph.transcriptionRepository
+        .observeChunks(activeJob.id)
+        .collectAsStateWithLifecycle(emptyList())
+    val total = chunks.maxOfOrNull { it.endMs } ?: 0L
+    val completed =
+        chunks.filter { it.status == io.github.surioustype.localscribe.core.model.ChunkStatus.COMPLETED }
+            .maxOfOrNull { it.endMs } ?: 0L
+    Card(
+        modifier =
+            Modifier.fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .clickable(onClick = onOpenQueue)
+                .semantics { contentDescription = "Открыть очередь обработки" },
+        colors = localScribeCardColors(),
+        shape = localScribeShape,
+    ) {
+        Column(
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
+        ) {
+            Text(
+                "Обработка · " + localizedJobStatus(activeJob.status.name) +
+                    " · Ожидают: " + waitingCount,
+                style = MaterialTheme.typography.labelMedium,
+            )
+            Text(
+                "Модель: " + activeJob.config.modelId +
+                    " · " + formatAudioDuration(completed) +
+                    " / " + formatAudioDuration(total),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (activeJob.status == JobStatus.RUNNING && total > 0L) {
+                LocalScribeProgress(progress = completed.toFloat() / total.toFloat())
+            }
+        }
+    }
+}
+
+@Composable
 private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
     val context = LocalContext.current
     val jobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
     val sources by graph.audioRepository.observeSources().collectAsStateWithLifecycle(emptyList())
+    val priorityMap by graph.queuePriorities.priorities.collectAsStateWithLifecycle()
+    val waiting = pendingTranscriptionQueue(jobs, priorityMap)
+    val positions = waiting.mapIndexed { index, job -> job.id to index + 1 }.toMap()
     // Completed work stays visible instead of disappearing from the active-only filter.
     val visible = visibleProcessingJobs(jobs)
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -795,6 +825,7 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
                         ?.source
                         ?.displayName,
                 showTranscript = { uiModel.showTranscript(job.id) },
+                queuePosition = positions[job.id],
             )
         }
     }
