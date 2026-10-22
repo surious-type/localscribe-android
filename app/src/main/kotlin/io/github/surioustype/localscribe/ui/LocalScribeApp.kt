@@ -773,11 +773,13 @@ private fun QueueMiniPanel(
         .collectAsStateWithLifecycle(emptyList())
     val total = chunks.maxOfOrNull { it.endMs } ?: 0L
     val completed =
-        chunks.filter { it.status == ChunkStatus.COMPLETED }
+        chunks
+            .filter { it.status == ChunkStatus.COMPLETED }
             .maxOfOrNull { it.endMs } ?: 0L
     Card(
         modifier =
-            Modifier.fillMaxWidth()
+            Modifier
+                .fillMaxWidth()
                 .padding(horizontal = 12.dp, vertical = 4.dp)
                 .clickable(onClick = onOpenQueue)
                 .semantics { contentDescription = "Открыть очередь обработки" },
@@ -1177,6 +1179,7 @@ private fun JobRow(
     var actionMessage by remember { mutableStateOf<String?>(null) }
     val priorities by graph.queuePriorities.priorities.collectAsStateWithLifecycle()
     val priority = priorities[job.id] ?: QueuePriority.NORMAL
+
     fun controlAction(action: String) {
         runCatching {
             context.startService(
