@@ -259,10 +259,12 @@ class TranscriptionCoordinatorTest {
         }
 
     @Test
-    fun `changed source fingerprint restarts instead of mixing completed checkpoints`() =
+    fun `changed source fingerprint pauses without deleting any completed checkpoints`() =
         runTest {
             val completed = chunks().first().copy(status = ChunkStatus.COMPLETED)
             val repository = FakeDurableRepository(job(), listOf(completed, chunks().last()))
+            repository.segments +=
+                TranscriptSegment("saved", completed.id, 100, 500, "keep this")
             val audio = FakeAudioRepository().apply { verifiedFingerprint = "changed" }
             val pipeline = FakeAudioPipeline()
             val coordinator =
@@ -273,10 +275,16 @@ class TranscriptionCoordinatorTest {
                     audioPipeline = pipeline,
                 )
 
-            assertEquals(ExecutionOutcome.Completed, coordinator.execute(JOB_ID))
-            assertEquals("changed", repository.currentJob.sourceFingerprint)
-            assertEquals(listOf("chunk-1", "chunk-2"), pipeline.readChunkIds)
-            assertEquals(listOf(1, 1), repository.currentChunks.map { it.attempt })
+            assertEquals(ExecutionOutcome.Paused, coordinator.execute(JOB_ID))
+            assertEquals(JobStatus.PAUSED, repository.currentJob.status)
+            assertEquals("fingerprint", repository.currentJob.sourceFingerprint)
+            assertEquals("source_identity_changed", repository.currentJob.failure?.diagnostic)
+            assertEquals(listOf("keep this"), repository.segments.map { it.text })
+            assertEquals(
+                listOf(ChunkStatus.COMPLETED, ChunkStatus.PAUSED),
+                repository.currentChunks.map { it.status },
+            )
+            assertTrue(pipeline.readChunkIds.isEmpty())
         }
 
     @Test
