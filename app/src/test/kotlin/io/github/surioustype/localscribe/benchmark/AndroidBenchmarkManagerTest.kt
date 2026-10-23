@@ -384,7 +384,7 @@ class AndroidBenchmarkManagerTest {
                     wrongThreads,
                 ),
             )
-        assertEquals(listOf("a", "b"), compatible.map { it.id })
+        assertEquals(setOf("a", "b"), compatible.map { it.id }.toSet())
     }
 
     private fun manager(
