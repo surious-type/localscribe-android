@@ -209,6 +209,8 @@ internal fun BenchmarkRecord.toEntity(): BenchmarkEntity {
         approximatePeakMemoryBytes,
         createdAtEpochMs,
         sampleId,
+        wordErrorRate,
+        characterErrorRate,
     )
 }
 
@@ -239,6 +241,8 @@ internal fun BenchmarkEntity.toModel(): BenchmarkRecord {
         approximatePeakMemoryBytes,
         createdAtEpochMs,
         sampleId,
+        wordErrorRate,
+        characterErrorRate,
     )
 }
 

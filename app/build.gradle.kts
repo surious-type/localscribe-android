@@ -149,6 +149,12 @@ tasks.register<org.gradle.api.tasks.JavaExec>("appKtlintFormat") {
     configureAppKtlint(format = true)
 }
 
+// Both flavors export the same Room schema path. Concurrent KSP writers can leave
+// an incomplete schema JSON that the other compiler fails to read.
+tasks.matching { it.name.startsWith("kspPlay") && it.name.endsWith("Kotlin") }.configureEach {
+    mustRunAfter(tasks.matching { it.name.startsWith("kspGithub") && it.name.endsWith("Kotlin") })
+}
+
 tasks.named("ktlintCheck") {
     dependsOn(appKtlintCheck)
 }

@@ -159,4 +159,6 @@ data class BenchmarkEntity(
     val approximatePeakMemoryBytes: Long?,
     val createdAtEpochMs: Long,
     val sampleId: String,
+    val wordErrorRate: Double? = null,
+    val characterErrorRate: Double? = null,
 )

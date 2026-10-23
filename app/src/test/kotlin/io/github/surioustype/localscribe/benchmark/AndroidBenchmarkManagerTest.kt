@@ -51,6 +51,8 @@ class AndroidBenchmarkManagerTest {
             assertEquals(1_000, record.audioDurationMs)
             assertEquals(1, engine.loadCalls)
             assertEquals(1, engine.unloadCalls)
+            assertEquals(1.0, record.wordErrorRate!!, 0.0001)
+            assertTrue(record.characterErrorRate!! > 0.0)
             assertEquals(record, store.records.single())
         }
 
@@ -318,6 +320,71 @@ class AndroidBenchmarkManagerTest {
                     listOf(base.copy(config = InferenceConfig(2))),
                 ).isEmpty(),
         )
+    }
+
+    @Test
+    fun `quality demo persists WER and CER from the same single inference pass`() =
+        runTest {
+            val engine =
+                FakeEngine(
+                    TranscriptionResult(listOf(EngineSegment(0, 1_000, "the fast dog"))),
+                )
+            val store = FakeStore()
+            val result =
+                manager(engine, store).runQualityDemo(
+                    model(),
+                    InferenceConfig(threadCount = 4, language = "en"),
+                    SAMPLE,
+                    hardware(),
+                )
+            assertEquals(1, engine.loadCalls)
+            assertEquals(1, engine.unloadCalls)
+            assertEquals(
+                result.score.wordErrorRate,
+                store.records.single().wordErrorRate!!,
+                0.00001,
+            )
+            assertEquals(
+                result.score.characterErrorRate,
+                store.records.single().characterErrorRate!!,
+                0.00001,
+            )
+        }
+
+    @Test
+    fun `cross model comparison preserves exact experimental conditions`() {
+        val base =
+            BenchmarkRecord(
+                "a",
+                "device",
+                "tiny",
+                "hash1",
+                InferenceConfig(4, "en"),
+                37_000,
+                18_500,
+                0.5,
+                2.0,
+                createdAtEpochMs = 1,
+                sampleId = SAMPLE,
+            )
+        val another = base.copy(id = "b", modelId = "small", modelHash = "hash2")
+        val wrongLanguage = another.copy(id = "c", config = InferenceConfig(4, "ru"))
+        val wrongSample = another.copy(id = "d", sampleId = "other")
+        val wrongDevice = another.copy(id = "e", deviceId = "other")
+        val wrongThreads = another.copy(id = "f", config = InferenceConfig(2, "en"))
+        val compatible =
+            BenchmarkComparisons.comparableModels(
+                base,
+                listOf(
+                    base,
+                    another,
+                    wrongLanguage,
+                    wrongSample,
+                    wrongDevice,
+                    wrongThreads,
+                ),
+            )
+        assertEquals(setOf("a", "b"), compatible.map { it.id }.toSet())
     }
 
     private fun manager(

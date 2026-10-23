@@ -187,7 +187,7 @@ class LocalScribeDatabaseMigrationTest {
     }
 
     @Test
-    fun migration4To6AllowsFingerprintRestartToReplaceLegacyCheckpoints() =
+    fun migration4To7AllowsFingerprintRestartToReplaceLegacyCheckpoints() =
         runBlocking {
             helper.createDatabase(RESTART_DATABASE_NAME, 4).apply {
                 execSQL(
@@ -227,10 +227,11 @@ class LocalScribeDatabaseMigrationTest {
             helper
                 .runMigrationsAndValidate(
                     RESTART_DATABASE_NAME,
-                    6,
+                    7,
                     true,
                     LocalScribeDatabase.MIGRATION_4_5,
                     LocalScribeDatabase.MIGRATION_5_6,
+                    LocalScribeDatabase.MIGRATION_6_7,
                 ).close()
 
             val context = InstrumentationRegistry.getInstrumentation().targetContext
@@ -332,9 +333,58 @@ class LocalScribeDatabaseMigrationTest {
             }
     }
 
+    @Test
+    fun migration6To7PreservesBenchmarksAndAddsNullableQualityMetrics() {
+        helper.createDatabase(QUALITY_DATABASE_NAME, 6).apply {
+            execSQL(
+                "INSERT INTO model_benchmarks " +
+                    "(id, deviceId, modelId, modelHash, threadCount, " +
+                    "translateToEnglish, temperature, audioDurationMs, processingDurationMs, " +
+                    "realTimeFactor, realTimeMultiplier, createdAtEpochMs, sampleId) " +
+                    "VALUES ('legacy', 'device', 'tiny', 'hash', 4, 0, 0, " +
+                    "37000, 18500, 0.5, 2, 100, 'english_jfk_37s')",
+            )
+            close()
+        }
+
+        helper
+            .runMigrationsAndValidate(
+                QUALITY_DATABASE_NAME,
+                7,
+                true,
+                LocalScribeDatabase.MIGRATION_6_7,
+            ).use { database ->
+                database
+                    .query(
+                        "SELECT realTimeFactor, sampleId, wordErrorRate, characterErrorRate " +
+                            "FROM model_benchmarks WHERE id = 'legacy'",
+                    ).use { cursor ->
+                        assertEquals(true, cursor.moveToFirst())
+                        assertEquals(0.5, cursor.getDouble(0), 0.00001)
+                        assertEquals("english_jfk_37s", cursor.getString(1))
+                        assertNull(cursor.getString(2))
+                        assertNull(cursor.getString(3))
+                    }
+                database.execSQL(
+                    "UPDATE model_benchmarks SET wordErrorRate = 0.25, " +
+                        "characterErrorRate = 0.1 WHERE id = 'legacy'",
+                )
+                database
+                    .query(
+                        "SELECT wordErrorRate, characterErrorRate " +
+                            "FROM model_benchmarks WHERE id = 'legacy'",
+                    ).use { cursor ->
+                        assertEquals(true, cursor.moveToFirst())
+                        assertEquals(0.25, cursor.getDouble(0), 0.00001)
+                        assertEquals(0.1, cursor.getDouble(1), 0.00001)
+                    }
+            }
+    }
+
     private companion object {
         const val DATABASE_NAME = "migration-test"
         const val RESTART_DATABASE_NAME = "migration-restart-test"
         const val METADATA_DATABASE_NAME = "migration-metadata-test"
+        const val QUALITY_DATABASE_NAME = "migration-quality-test"
     }
 }

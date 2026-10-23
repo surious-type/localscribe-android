@@ -10,8 +10,11 @@ class JobTransitionsTest {
     @Test
     fun `job lifecycle permits start pause resume completion and cancellation`() {
         assertTrue(JobTransitions.canTransition(JobStatus.PENDING, JobStatus.RUNNING))
+        assertTrue(JobTransitions.canTransition(JobStatus.PENDING, JobStatus.PAUSED))
         assertTrue(JobTransitions.canTransition(JobStatus.RUNNING, JobStatus.PAUSED))
         assertTrue(JobTransitions.canTransition(JobStatus.PAUSED, JobStatus.RUNNING))
+        assertTrue(JobTransitions.canTransition(JobStatus.FAILED, JobStatus.RUNNING))
+        assertFalse(JobTransitions.canTransition(JobStatus.FAILED, JobStatus.PENDING))
         assertTrue(JobTransitions.canTransition(JobStatus.RUNNING, JobStatus.COMPLETED))
         assertTrue(JobTransitions.canTransition(JobStatus.PAUSED, JobStatus.CANCELLED))
         assertFalse(JobTransitions.canTransition(JobStatus.PAUSED, JobStatus.COMPLETED))
@@ -19,7 +22,7 @@ class JobTransitionsTest {
 
     @Test
     fun `terminal job states cannot transition`() {
-        listOf(JobStatus.CANCELLED, JobStatus.FAILED, JobStatus.COMPLETED).forEach { terminal ->
+        listOf(JobStatus.CANCELLED, JobStatus.COMPLETED).forEach { terminal ->
             JobStatus.entries.forEach { target ->
                 assertFalse("$terminal -> $target", JobTransitions.canTransition(terminal, target))
             }
