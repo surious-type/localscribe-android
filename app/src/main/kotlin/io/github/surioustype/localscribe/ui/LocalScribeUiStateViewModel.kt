@@ -48,6 +48,7 @@ class LocalScribeUiStateViewModel(
                 libraryQuery = state[LIBRARY_QUERY] ?: "",
                 transcriptSeekToMs = state[TRANSCRIPT_SEEK],
                 transcriptQuery = state[TRANSCRIPT_QUERY] ?: "",
+                transcriptReadingMode = state[TRANSCRIPT_READING_MODE] ?: "TIMECODES",
                 exportFormat = state[EXPORT_FORMAT],
                 statusMessage = state[STATUS_MESSAGE],
                 sourceModelId = state[SOURCE_MODEL_ID],
@@ -157,6 +158,9 @@ class LocalScribeUiStateViewModel(
 
     fun setTranscriptQuery(value: String) = update { it.copy(transcriptQuery = value) }
 
+    fun setTranscriptReadingMode(value: TranscriptReadingMode) =
+        update { it.copy(transcriptReadingMode = value.name) }
+
     fun setExportFormat(value: String?) = update { it.copy(exportFormat = value) }
 
     fun completeTranscriptExport(succeeded: Boolean) =
@@ -214,6 +218,7 @@ class LocalScribeUiStateViewModel(
         state[LIBRARY_QUERY] = next.libraryQuery
         state[TRANSCRIPT_SEEK] = next.transcriptSeekToMs
         state[TRANSCRIPT_QUERY] = next.transcriptQuery
+        state[TRANSCRIPT_READING_MODE] = next.transcriptReadingMode
         state[EXPORT_FORMAT] = next.exportFormat
         state[STATUS_MESSAGE] = next.statusMessage
         state[SOURCE_MODEL_ID] = next.sourceModelId
@@ -252,6 +257,7 @@ class LocalScribeUiStateViewModel(
         const val LIBRARY_QUERY = "library_query"
         const val TRANSCRIPT_SEEK = "transcript_seek"
         const val TRANSCRIPT_QUERY = "transcript_query"
+        const val TRANSCRIPT_READING_MODE = "transcript_reading_mode"
         const val EXPORT_FORMAT = "export_format"
         const val STATUS_MESSAGE = "status_message"
         const val CONSUMED_INBOUND_AUDIO = "consumed_inbound_audio"
@@ -278,6 +284,7 @@ data class LocalScribeUiState(
     val libraryQuery: String,
     val transcriptSeekToMs: Long?,
     val transcriptQuery: String,
+    val transcriptReadingMode: String,
     val exportFormat: String?,
     val statusMessage: String?,
     val sourceModelId: String?,

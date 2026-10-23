@@ -29,6 +29,27 @@ internal class SerialExecutionQueue(
         if (active == null) launchNext()
     }
 
+    /**
+     * Replace the waiting order from durable Room state. Never interrupt the active job:
+     * raising a priority changes the next job, not the currently running model.
+     */
+    fun schedule(jobIds: List<String>, startId: Int) {
+        if (closed) return
+        val activeId = active?.jobId
+        pending.clear()
+        jobIds.distinct().filter { it != activeId }.forEach { jobId ->
+            pending.addLast(ExecutionRequest(jobId, startId))
+        }
+        if (active == null) {
+            if (pending.isEmpty()) onIdle(startId) else launchNext()
+        }
+    }
+
+    /** A paused or cancelled waiting job must not execute from an old service intent. */
+    fun remove(jobId: String) {
+        pending.removeAll { it.jobId == jobId }
+    }
+
     fun cancel() {
         closed = true
         pending.clear()
@@ -37,7 +58,7 @@ internal class SerialExecutionQueue(
 
     private fun launchNext() {
         val request = pending.pollFirst() ?: return
-        val execution = ActiveExecution()
+        val execution = ActiveExecution(request.jobId)
         val job =
             scope.launch(start = CoroutineStart.LAZY) {
                 try {
@@ -64,7 +85,7 @@ internal class SerialExecutionQueue(
         val startId: Int,
     )
 
-    private class ActiveExecution {
+    private class ActiveExecution(val jobId: String) {
         lateinit var job: Job
     }
 }

@@ -116,7 +116,11 @@ class TranscriptionCoordinator(
                     ) {
                         return@withLock ExecutionOutcome.Completed
                     }
-                    if (job.status != JobStatus.PENDING && job.status != JobStatus.PAUSED) {
+                    if (
+                        job.status != JobStatus.PENDING &&
+                        job.status != JobStatus.PAUSED &&
+                        job.status != JobStatus.FAILED
+                    ) {
                         return@withLock ExecutionOutcome.Failed(
                             DomainFailure(
                                 FailureCode.INVALID_STATE_TRANSITION,
@@ -130,6 +134,7 @@ class TranscriptionCoordinator(
                                 ?: when (repository.getJob(jobId)?.status) {
                                     JobStatus.PENDING,
                                     JobStatus.PAUSED,
+                                    JobStatus.FAILED,
                                     -> {
                                         repository.resumeJob(jobId, clock.nowEpochMs())
                                         null
@@ -182,10 +187,11 @@ class TranscriptionCoordinator(
                         )
                     }
                     if (job.sourceFingerprint != currentFingerprint) {
-                        repository.restartForSourceFingerprint(
+                        // The selected URI no longer identifies the original recording.
+                        // Never erase completed checkpoints without an explicit user action.
+                        return@withLock pauseForDependency(
                             jobId,
-                            currentFingerprint,
-                            clock.nowEpochMs(),
+                            DomainFailure(FailureCode.SOURCE_MISSING, "source_identity_changed"),
                         )
                     }
                     val model =
@@ -259,7 +265,7 @@ class TranscriptionCoordinator(
                             job.config.inference.withThreads(
                                 thermal.threadCount(job.config.inference.threadCount),
                             )
-                        liveTranscript.clear(jobId)
+                        liveTranscript.beginChunk(jobId, chunk.id)
                         val inferenceStarted = System.nanoTime()
                         val result =
                             if (prepared.isSilent) {
@@ -374,6 +380,7 @@ class TranscriptionCoordinator(
             val job = repository.getJob(jobId) ?: return
             val active = activeExecutions.filter { it.jobId == jobId }
             if (job.status == JobStatus.PENDING) {
+                repository.pauseJob(jobId, atEpochMs, reason)
                 active.forEach { it.request.set(ControlRequest.PAUSE) }
                 return
             }

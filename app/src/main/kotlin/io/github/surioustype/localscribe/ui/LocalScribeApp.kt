@@ -14,9 +14,11 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -75,8 +77,10 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -104,22 +108,28 @@ import io.github.surioustype.localscribe.core.domain.TranscriptAssembler
 import io.github.surioustype.localscribe.core.model.AppVersion
 import io.github.surioustype.localscribe.core.model.AudioSourceRecord
 import io.github.surioustype.localscribe.core.model.BenchmarkRecord
+import io.github.surioustype.localscribe.core.model.ChunkStatus
 import io.github.surioustype.localscribe.core.model.ExportFormat
 import io.github.surioustype.localscribe.core.model.InferenceConfig
 import io.github.surioustype.localscribe.core.model.InstalledModel
 import io.github.surioustype.localscribe.core.model.JobStatus
 import io.github.surioustype.localscribe.core.model.ModelKind
+import io.github.surioustype.localscribe.core.model.TranscriptSegment
 import io.github.surioustype.localscribe.core.model.TranscriptionConfig
 import io.github.surioustype.localscribe.core.model.TranscriptionJob
 import io.github.surioustype.localscribe.core.model.UpdateAvailability
 import io.github.surioustype.localscribe.core.model.VadConfig
 import io.github.surioustype.localscribe.di.AppGraph
 import io.github.surioustype.localscribe.di.AppPreferences
+import io.github.surioustype.localscribe.service.QueuePriority
 import io.github.surioustype.localscribe.service.TranscriptionService
+import io.github.surioustype.localscribe.service.pendingTranscriptionQueue
 import io.github.surioustype.localscribe.ui.playback.AndroidMediaPlayerBackend
 import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackController
+import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackPreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -173,6 +183,15 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
             }
             return@MaterialTheme
         }
+        LaunchedEffect(graph) {
+            try {
+                graph.awaitStartupRecovery()
+            } catch (cancelled: CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                uiModel.setStatusMessage("Не удалось восстановить состояние задач")
+            }
+        }
         LaunchedEffect(Unit) {
             graph.updates.checkForUpdate(AppVersion(BuildConfig.VERSION_NAME), force = false)
         }
@@ -186,11 +205,12 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
         val backgroundJobs by graph.transcriptionRepository
             .observeJobs()
             .collectAsStateWithLifecycle(emptyList())
+        val queuePriorities by graph.queuePriorities.priorities.collectAsStateWithLifecycle()
+        val waitingJobs = pendingTranscriptionQueue(backgroundJobs, queuePriorities)
         val activeJob =
             backgroundJobs.firstOrNull { it.status == JobStatus.RUNNING }
-                ?: backgroundJobs.firstOrNull {
-                    it.status == JobStatus.PENDING || it.status == JobStatus.PAUSED
-                }
+                ?: waitingJobs.firstOrNull()
+                ?: backgroundJobs.firstOrNull { it.status == JobStatus.PAUSED }
         BackHandler(enabled = uiModel.canNavigateBack()) {
             uiModel.navigateBack()
         }
@@ -225,33 +245,12 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                 if (!detail) {
                     Column {
                         if (activeJob != null) {
-                            Card(
-                                modifier =
-                                    Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 12.dp, vertical = 4.dp)
-                                        .clickable { uiModel.showProcessing(true) }
-                                        .semantics {
-                                            contentDescription = "Открыть очередь обработки"
-                                        },
-                                colors = localScribeCardColors(),
-                                shape = localScribeShape,
-                            ) {
-                                Column(
-                                    Modifier.padding(12.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                                ) {
-                                    Text("Обработка · " + localizedJobStatus(activeJob.status.name))
-                                    Text(
-                                        "Модель: " + activeJob.config.modelId,
-                                        style = MaterialTheme.typography.bodySmall,
-                                    )
-                                    Text(
-                                        "Нажмите, чтобы открыть очередь",
-                                        style = MaterialTheme.typography.labelSmall,
-                                    )
-                                }
-                            }
+                            QueueMiniPanel(
+                                activeJob = activeJob,
+                                graph = graph,
+                                waitingCount = waitingJobs.size,
+                                onOpenQueue = { uiModel.showProcessing(true) },
+                            )
                         }
                         NavigationBar(containerColor = MaterialTheme.colorScheme.background) {
                             Destination.entries
@@ -283,58 +282,71 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                 }
             },
         ) { padding ->
-            Column(
-                Modifier
-                    .fillMaxSize()
-                    .padding(padding)
-                    .widthIn(max = 900.dp)
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+            Box(
+                modifier = Modifier.fillMaxSize().padding(padding),
+                contentAlignment = Alignment.TopCenter,
             ) {
-                when {
-                    savedUi.transcriptJobId != null -> {
-                        val selectedJobId = requireNotNull(savedUi.transcriptJobId)
-                        key(selectedJobId) {
-                            TranscriptScreen(
-                                selectedJobId,
-                                graph,
-                                savedUi.transcriptQuery,
-                                savedUi.transcriptSeekToMs,
-                                savedUi.exportFormat,
-                                uiModel::setTranscriptQuery,
-                                uiModel::setExportFormat,
-                                uiModel::completeTranscriptExport,
-                                uiModel::setStatusMessage,
-                                onChooseVersion = uiModel::showTranscript,
-                                onRetranscribe = uiModel::retranscribe,
-                                close = { uiModel.showTranscript(null) },
-                            )
-                        }
-                    }
-                    savedUi.selectedSourceId != null -> {
-                        val installed by graph.installedModels
-                            .observeInstalledModels()
-                            .collectAsStateWithLifecycle(emptyList())
-                        LazyColumn {
-                            item {
-                                SourceControls(
-                                    requireNotNull(savedUi.selectedSourceId),
-                                    installed,
+                Column(
+                    modifier =
+                        Modifier
+                            .widthIn(max = 900.dp)
+                            .fillMaxHeight()
+                            .padding(horizontal = 16.dp, vertical = 8.dp),
+                ) {
+                    when {
+                        savedUi.transcriptJobId != null -> {
+                            val selectedJobId = requireNotNull(savedUi.transcriptJobId)
+                            key(selectedJobId) {
+                                TranscriptScreen(
+                                    selectedJobId,
                                     graph,
-                                    context,
-                                    uiModel,
-                                    savedUi,
-                                    close = { uiModel.selectSource(null) },
+                                    savedUi.transcriptQuery,
+                                    savedUi.transcriptReadingMode,
+                                    savedUi.transcriptSeekToMs,
+                                    savedUi.exportFormat,
+                                    uiModel::setTranscriptQuery,
+                                    uiModel::setTranscriptReadingMode,
+                                    uiModel::setExportFormat,
+                                    uiModel::completeTranscriptExport,
+                                    uiModel::setStatusMessage,
+                                    onChooseVersion = uiModel::showTranscript,
+                                    onRetranscribe = uiModel::retranscribe,
+                                    close = { uiModel.showTranscript(null) },
                                 )
                             }
                         }
+                        savedUi.selectedSourceId != null -> {
+                            val installed by graph.installedModels
+                                .observeInstalledModels()
+                                .collectAsStateWithLifecycle(emptyList())
+                            LazyColumn {
+                                item {
+                                    SourceControls(
+                                        requireNotNull(savedUi.selectedSourceId),
+                                        installed,
+                                        graph,
+                                        context,
+                                        uiModel,
+                                        savedUi,
+                                        close = { uiModel.selectSource(null) },
+                                    )
+                                }
+                            }
+                        }
+                        processing -> Processing(graph, uiModel)
+                        destination == Destination.HOME ->
+                            Home(
+                                graph,
+                                receivedUri,
+                                uiModel,
+                                savedUi,
+                            )
+                        destination == Destination.MODELS -> Models(graph, uiModel, savedUi)
+                        else ->
+                            Settings(graph, preferences, { appearanceMode = it }, {
+                                dynamicColors = it
+                            })
                     }
-                    processing -> Processing(graph, uiModel)
-                    destination == Destination.HOME -> Home(graph, receivedUri, uiModel, savedUi)
-                    destination == Destination.MODELS -> Models(graph, uiModel, savedUi)
-                    else ->
-                        Settings(graph, preferences, { appearanceMode = it }, {
-                            dynamicColors = it
-                        })
                 }
             }
         }
@@ -384,6 +396,7 @@ private fun Home(
     val sources by graph.audioRepository.observeSources().collectAsStateWithLifecycle(emptyList())
     val jobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
     val searchSegments by graph.transcriptSearch.collectAsStateWithLifecycle(emptyList())
+    val primaryVersions by graph.transcriptVersions.selectedVersions.collectAsStateWithLifecycle()
     var filter by remember { mutableStateOf(preferences.libraryFilter) }
     var sort by remember { mutableStateOf(preferences.librarySort) }
     var renameTarget by remember { mutableStateOf<AudioSourceRecord?>(null) }
@@ -447,7 +460,12 @@ private fun Home(
             searchLibrary(ordered, searchSegments, query)
         }
     val openRecord: (AudioSourceRecord) -> Unit = { record ->
-        val completed = latestCompletedTranscriptionJob(jobs, record.source.id)
+        val completed =
+            preferredCompletedTranscript(
+                jobs,
+                record.source.id,
+                primaryVersions[record.source.id],
+            )
         val active =
             jobs.any {
                 it.sourceId == record.source.id &&
@@ -474,12 +492,27 @@ private fun Home(
             )
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(onClick = { picker.launch(arrayOf("audio/*")) }) {
-                    Text("＋ Импорт")
-                }
-                OutlinedButton(onClick = { permission.launch(mediaPermission) }) {
-                    Text("Показать записи")
+            BoxWithConstraints {
+                if (maxWidth < 390.dp) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { picker.launch(arrayOf("audio/*")) },
+                        ) { Text("Импортировать аудио") }
+                        OutlinedButton(
+                            modifier = Modifier.fillMaxWidth(),
+                            onClick = { permission.launch(mediaPermission) },
+                        ) { Text("Показать записи на устройстве") }
+                    }
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { picker.launch(arrayOf("audio/*")) }) {
+                            Text("Импортировать аудио")
+                        }
+                        OutlinedButton(onClick = { permission.launch(mediaPermission) }) {
+                            Text("Показать записи")
+                        }
+                    }
                 }
             }
         }
@@ -543,7 +576,14 @@ private fun Home(
                 }
             }
         }
-        savedUi.statusMessage?.let { item { Text(it, color = MaterialTheme.colorScheme.primary) } }
+        savedUi.statusMessage?.let { message ->
+            item {
+                LibraryFeedbackMessage(
+                    message = message,
+                    onDismiss = { uiModel.setStatusMessage(null) },
+                )
+            }
+        }
         if (query.isNotBlank()) {
             item {
                 Text(
@@ -554,164 +594,67 @@ private fun Home(
             if (hits.isEmpty()) {
                 item {
                     LibraryEmptyState(
-                        "Совпадений нет",
-                        "Проверьте запрос или измените фильтр записей.",
+                        title = "Совпадений нет",
+                        description = "Попробуйте другой запрос или покажите все записи.",
+                        actionLabel = "Сбросить поиск и фильтр",
+                        onAction = {
+                            uiModel.setLibraryQuery("")
+                            filter = "all"
+                            preferences.libraryFilter = "all"
+                        },
                     )
                 }
             }
             items(hits) { hit ->
-                Card(
-                    modifier =
-                        Modifier.fillMaxWidth().clickable {
-                            if (hit.jobId != null && hit.startMs != null) {
-                                uiModel.openTranscriptAt(hit.jobId, hit.startMs, query)
-                            } else {
-                                openRecord(hit.record)
-                            }
-                        },
-                    colors = localScribeCardColors(),
-                    shape = localScribeShape,
-                ) {
-                    Column(
-                        Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
-                    ) {
-                        Text(libraryTitle(hit.record), style = MaterialTheme.typography.titleMedium)
-                        if (hit.startMs != null) {
-                            Text(
-                                "В тексте · " + formatAudioDuration(hit.startMs),
-                                color = MaterialTheme.colorScheme.primary,
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        } else {
-                            Text(
-                                "Совпадение в названии",
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        }
-                        hit.snippet?.let { Text(it, maxLines = 3) }
+                LibrarySearchResultCard(hit) {
+                    if (hit.jobId != null && hit.startMs != null) {
+                        uiModel.openTranscriptAt(hit.jobId, hit.startMs, query)
+                    } else {
+                        openRecord(hit.record)
                     }
                 }
             }
         } else {
             if (ordered.isEmpty()) {
                 item {
-                    LibraryEmptyState(
-                        if (sources.isEmpty()) {
-                            "Записей пока нет"
-                        } else {
-                            "Нет записей с этим статусом"
-                        },
-                        if (sources.isEmpty()) {
-                            "Импортируйте аудио или разрешите доступ к записям на устройстве."
-                        } else {
-                            "Попробуйте другой фильтр."
-                        },
-                    )
+                    if (sources.isEmpty()) {
+                        LibraryEmptyState(
+                            title = "Записей пока нет",
+                            description =
+                                "Добавьте аудиофайл, чтобы начать локальную расшифровку. " +
+                                    "Ваши записи останутся на устройстве.",
+                            actionLabel = "Импортировать аудио",
+                            onAction = { picker.launch(arrayOf("audio/*")) },
+                        )
+                    } else {
+                        LibraryEmptyState(
+                            title = "Нет записей с этим статусом",
+                            description =
+                                "Попробуйте другой фильтр, " +
+                                    "чтобы увидеть остальные записи.",
+                            actionLabel = "Показать все записи",
+                            onAction = {
+                                filter = "all"
+                                preferences.libraryFilter = "all"
+                            },
+                        )
+                    }
                 }
             }
             items(ordered, key = { it.source.id }) { record ->
-                val latest =
-                    jobs
-                        .filter { it.sourceId == record.source.id }
-                        .maxByOrNull { it.createdAtEpochMs }
-                val completed =
-                    jobs.any {
-                        it.sourceId == record.source.id && it.status == JobStatus.COMPLETED
-                    }
-                val active =
-                    jobs.any {
-                        it.sourceId == record.source.id &&
-                            it.status in
-                            setOf(JobStatus.RUNNING, JobStatus.PENDING, JobStatus.PAUSED)
-                    }
-                val label =
-                    when {
-                        record.accessStatus.name != "AVAILABLE" ->
-                            localizedSourceStatus(record.accessStatus.name)
-                        active -> localizedJobStatus(latest?.status?.name ?: "PENDING")
-                        completed -> "Расшифровка готова"
-                        latest?.status == JobStatus.FAILED -> "Ошибка обработки"
-                        else -> "Без расшифровки"
-                    }
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = localScribeCardColors(),
-                    shape = localScribeShape,
-                ) {
-                    Row(
-                        Modifier.fillMaxWidth().padding(12.dp),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Icon(
-                            Icons.Default.Mic,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 12.dp),
-                        )
-                        Column(
-                            Modifier
-                                .weight(1f)
-                                .clickable { openRecord(record) }
-                                .padding(vertical = 8.dp),
-                            verticalArrangement = Arrangement.spacedBy(5.dp),
-                        ) {
-                            Text(
-                                libraryTitle(record),
-                                style = MaterialTheme.typography.titleMedium,
-                                maxLines = 2,
-                                overflow = TextOverflow.Ellipsis,
-                            )
-                            Text(
-                                formatAudioDuration(record.source.durationMs) +
-                                    " · " + label,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                            record.recordedAtEpochMs?.let {
-                                Text(
-                                    "Записано: " + formatLocalDate(it),
-                                    style = MaterialTheme.typography.bodySmall,
-                                )
-                            }
-                            Text(
-                                record.addedAtEpochMs?.let {
-                                    "Добавлено: " + formatLocalDate(it)
-                                } ?: "Дата добавления неизвестна",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.bodySmall,
-                            )
-                        }
-                        var menuOpen by remember { mutableStateOf(false) }
-                        Box {
-                            IconButton(onClick = { menuOpen = true }) {
-                                Icon(Icons.Default.Tune, contentDescription = "Действия с записью")
-                            }
-                            androidx.compose.material3.DropdownMenu(
-                                expanded = menuOpen,
-                                onDismissRequest = { menuOpen = false },
-                            ) {
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = { Text("Переименовать") },
-                                    onClick = {
-                                        renameText = libraryTitle(record)
-                                        renameTarget = record
-                                        menuOpen = false
-                                    },
-                                )
-                                if (completed) {
-                                    androidx.compose.material3.DropdownMenuItem(
-                                        text = { Text("Распознать заново") },
-                                        onClick = {
-                                            menuOpen = false
-                                            uiModel.retranscribe(record.source.id)
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
+                val recordJobs = jobs.filter { it.sourceId == record.source.id }
+                val presentation = libraryRecordPresentation(record, recordJobs)
+                LibraryRecordingCard(
+                    record = record,
+                    presentation = presentation,
+                    hasTranscript = recordJobs.any { it.status == JobStatus.COMPLETED },
+                    onOpen = { openRecord(record) },
+                    onRename = {
+                        renameText = libraryTitle(record)
+                        renameTarget = record
+                    },
+                    onRetranscribe = { uiModel.retranscribe(record.source.id) },
+                )
             }
         }
         item { Spacer(Modifier.height(16.dp)) }
@@ -753,18 +696,48 @@ private fun Home(
 }
 
 @Composable
-private fun LibraryEmptyState(title: String, description: String) {
-    Card(colors = localScribeCardColors(), shape = localScribeShape) {
+private fun QueueMiniPanel(
+    activeJob: TranscriptionJob,
+    graph: AppGraph,
+    waitingCount: Int,
+    onOpenQueue: () -> Unit,
+) {
+    val chunks by graph.transcriptionRepository
+        .observeChunks(activeJob.id)
+        .collectAsStateWithLifecycle(emptyList())
+    val total = chunks.maxOfOrNull { it.endMs } ?: 0L
+    val completed =
+        chunks
+            .filter { it.status == ChunkStatus.COMPLETED }
+            .maxOfOrNull { it.endMs } ?: 0L
+    Card(
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 4.dp)
+                .clickable(onClick = onOpenQueue)
+                .semantics { contentDescription = "Открыть очередь обработки" },
+        colors = localScribeCardColors(),
+        shape = localScribeShape,
+    ) {
         Column(
-            Modifier.fillMaxWidth().padding(24.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            Modifier.fillMaxWidth().padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(5.dp),
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
             Text(
-                description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                "Обработка · " + localizedJobStatus(activeJob.status.name) +
+                    " · Ожидают: " + waitingCount,
+                style = MaterialTheme.typography.labelMedium,
             )
+            Text(
+                "Модель: " + activeJob.config.modelId +
+                    " · " + formatAudioDuration(completed) +
+                    " / " + formatAudioDuration(total),
+                style = MaterialTheme.typography.bodySmall,
+            )
+            if (activeJob.status == JobStatus.RUNNING && total > 0L) {
+                LocalScribeProgress(progress = completed.toFloat() / total.toFloat())
+            }
         }
     }
 }
@@ -774,6 +747,9 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
     val context = LocalContext.current
     val jobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
     val sources by graph.audioRepository.observeSources().collectAsStateWithLifecycle(emptyList())
+    val priorityMap by graph.queuePriorities.priorities.collectAsStateWithLifecycle()
+    val waiting = pendingTranscriptionQueue(jobs, priorityMap)
+    val positions = waiting.mapIndexed { index, job -> job.id to index + 1 }.toMap()
     // Completed work stays visible instead of disappearing from the active-only filter.
     val visible = visibleProcessingJobs(jobs)
     LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -795,6 +771,9 @@ private fun Processing(graph: AppGraph, uiModel: LocalScribeUiStateViewModel) {
                         ?.source
                         ?.displayName,
                 showTranscript = { uiModel.showTranscript(job.id) },
+                onOpenModels = { uiModel.selectDestination(Destination.MODELS.name) },
+                queuePosition = positions[job.id],
+                hasActiveExecution = jobs.any { it.status == JobStatus.RUNNING },
             )
         }
     }
@@ -817,7 +796,13 @@ private fun SourceControls(
     val existingJobs by graph.transcriptionRepository
         .observeJobs()
         .collectAsStateWithLifecycle(emptyList())
-    val latestCompletedJob = latestCompletedTranscriptionJob(existingJobs, sourceId)
+    val primaryVersions by graph.transcriptVersions.selectedVersions.collectAsStateWithLifecycle()
+    val latestCompletedJob =
+        preferredCompletedTranscript(
+            existingJobs,
+            sourceId,
+            primaryVersions[sourceId],
+        )
     val transcriptionModels = installedModels.filter { it.descriptorId != "silero-v6.2.0" }
     val installedModelIds = transcriptionModels.map { it.descriptorId }.distinct()
     val vadModels = installedModels.filter { it.descriptorId == "silero-v6.2.0" }
@@ -1255,7 +1240,10 @@ private fun JobRow(
     graph: AppGraph,
     context: Context,
     showTranscript: () -> Unit,
+    onOpenModels: () -> Unit,
     sourceName: String? = null,
+    queuePosition: Int? = null,
+    hasActiveExecution: Boolean = false,
 ) {
     val scope = rememberCoroutineScope()
     var now by remember { mutableStateOf(System.currentTimeMillis()) }
@@ -1270,6 +1258,26 @@ private fun JobRow(
             job.id,
         ).collectAsStateWithLifecycle(emptyList())
     var actionMessage by remember { mutableStateOf<String?>(null) }
+    val priorities by graph.queuePriorities.priorities.collectAsStateWithLifecycle()
+    val priority = priorities[job.id] ?: QueuePriority.NORMAL
+
+    fun controlAction(action: String) {
+        runCatching {
+            context.startService(
+                Intent(context, TranscriptionService::class.java)
+                    .setAction(action)
+                    .putExtra(TranscriptionService.EXTRA_JOB_ID, job.id),
+            )
+        }.onFailure {
+            scope.launch {
+                if (action == TranscriptionService.ACTION_PAUSE) {
+                    graph.coordinator.pause(job.id)
+                } else {
+                    graph.coordinator.cancel(job.id)
+                }
+            }
+        }
+    }
     val relinkAudio =
         rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             uri?.let {
@@ -1344,27 +1352,73 @@ private fun JobRow(
                     " / " + formatAudioDuration(totalDuration),
                 style = MaterialTheme.typography.bodySmall,
             )
-            if (savedSegments.isNotEmpty() || previewSegments.isNotEmpty()) {
+            if (savedSegments.isNotEmpty()) {
+                Text("Сохранённый текст", style = MaterialTheme.typography.labelMedium)
                 Text(
-                    if (previewSegments.isNotEmpty()) {
-                        "Текст появляется в реальном времени"
-                    } else {
-                        "Уже распознано"
-                    },
+                    savedSegments.takeLast(2).joinToString(" ") { it.text },
+                    maxLines = 3,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
+            if (job.status == JobStatus.RUNNING && previewSegments.isNotEmpty()) {
+                Text(
+                    "Предварительный текст Whisper · ещё не сохранён",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    (savedSegments.takeLast(2) + previewSegments)
-                        .takeLast(4)
-                        .joinToString(" ") { it.text },
-                    maxLines = 5,
+                    previewSegments.takeLast(3).joinToString(" ") { it.text },
+                    maxLines = 4,
                     overflow = TextOverflow.Ellipsis,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
-            job.failure?.let {
+            if (job.status == JobStatus.PENDING) {
                 Text(
-                    userFacingFailure(it.code.name),
+                    "Ожидает в очереди · №" + (queuePosition ?: "…"),
+                    style = MaterialTheme.typography.labelMedium,
+                )
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(QueuePriority.entries) { option ->
+                        FilterChip(
+                            selected = priority == option,
+                            label = { Text(option.label) },
+                            onClick = {
+                                runCatching {
+                                    graph.queuePriorities.set(job.id, option)
+                                }.onSuccess {
+                                    if (hasActiveExecution) {
+                                        runCatching {
+                                            ContextCompat.startForegroundService(
+                                                context,
+                                                Intent(context, TranscriptionService::class.java)
+                                                    .setAction(TranscriptionService.ACTION_REORDER)
+                                                    .putExtra(
+                                                        TranscriptionService.EXTRA_JOB_ID,
+                                                        job.id,
+                                                    ),
+                                            )
+                                        }.onFailure {
+                                            actionMessage =
+                                                "Очередь обновится при следующем запуске."
+                                        }
+                                    }
+                                }.onFailure {
+                                    actionMessage = "Не удалось сохранить приоритет."
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+            job.failure?.let { failure ->
+                Text(
+                    if (failure.diagnostic == "source_identity_changed") {
+                        "Аудиофайл изменился. Готовые фрагменты сохранены. " +
+                            "Выберите оригинал или создайте новую задачу для другой записи."
+                    } else {
+                        userFacingFailure(failure.code.name)
+                    },
                     color = MaterialTheme.colorScheme.error,
                 )
             }
@@ -1373,16 +1427,14 @@ private fun JobRow(
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (job.status ==
-                    JobStatus.RUNNING
-                ) {
+                if (job.status == JobStatus.RUNNING || job.status == JobStatus.PENDING) {
                     IconButton(
-                        onClick = { scope.launch { graph.coordinator.pause(job.id) } },
+                        onClick = { controlAction(TranscriptionService.ACTION_PAUSE) },
                     ) {
                         Icon(Icons.Default.Pause, contentDescription = "Приостановить обработку")
                     }
                 }
-                if (job.status == JobStatus.PAUSED || job.status == JobStatus.PENDING) {
+                if (job.status in setOf(JobStatus.PAUSED, JobStatus.PENDING, JobStatus.FAILED)) {
                     val resume: () -> Unit = {
                         when (
                             TranscriptionStartController.resume(
@@ -1430,17 +1482,25 @@ private fun JobRow(
                             resume()
                         }
                     }) {
-                        Icon(Icons.Default.PlayArrow, contentDescription = "Продолжить")
+                        Icon(
+                            Icons.Default.PlayArrow,
+                            contentDescription =
+                                if (job.status == JobStatus.FAILED) {
+                                    "Повторить попытку"
+                                } else {
+                                    "Продолжить"
+                                },
+                        )
                     }
                 }
                 if (job.status in setOf(JobStatus.PENDING, JobStatus.RUNNING, JobStatus.PAUSED)) {
                     IconButton(
-                        onClick = { scope.launch { graph.coordinator.cancel(job.id) } },
+                        onClick = { controlAction(TranscriptionService.ACTION_STOP) },
                     ) {
                         Icon(Icons.Default.Close, contentDescription = "Остановить обработку")
                     }
                 }
-                if (job.status in setOf(JobStatus.COMPLETED, JobStatus.RUNNING, JobStatus.PAUSED)) {
+                if (job.status == JobStatus.COMPLETED || savedSegments.isNotEmpty()) {
                     IconButton(onClick = showTranscript) {
                         Icon(Icons.Default.Description, contentDescription = "Открыть текст")
                     }
@@ -1456,6 +1516,19 @@ private fun JobRow(
                 )
                 OutlinedButton(onClick = { relinkAudio.launch(arrayOf("audio/*")) }) {
                     Text("Восстановить доступ к записи")
+                }
+            }
+            if (job.status == JobStatus.PAUSED &&
+                job.failure?.code?.name in
+                setOf("MODEL_CORRUPTED", "MODEL_CHECKSUM_MISMATCH")
+            ) {
+                Text(
+                    "Восстановите исходную модель с тем же хешем во вкладке «Модели». " +
+                        "Другая версия модели требует нового распознавания.",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                OutlinedButton(onClick = onOpenModels) {
+                    Text("Открыть модели")
                 }
             }
             actionMessage?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -1480,9 +1553,11 @@ private fun TranscriptScreen(
     jobId: String,
     graph: AppGraph,
     query: String,
+    readingMode: String,
     seekToMs: Long?,
     pendingExportFormat: String?,
     setQuery: (String) -> Unit,
+    setReadingMode: (TranscriptReadingMode) -> Unit,
     setExportFormat: (String?) -> Unit,
     completeExport: (Boolean) -> Unit,
     setStatus: (String?) -> Unit,
@@ -1499,6 +1574,11 @@ private fun TranscriptScreen(
         .observeJobs()
         .collectAsStateWithLifecycle(emptyList())
     val versions = completedTranscriptionVersions(allJobs, job?.sourceId.orEmpty())
+    val primaryVersions by graph.transcriptVersions.selectedVersions.collectAsStateWithLifecycle()
+    val readerMode =
+        runCatching {
+            TranscriptReadingMode.valueOf(readingMode)
+        }.getOrDefault(TranscriptReadingMode.TIMECODES)
     var showVersions by remember { mutableStateOf(false) }
     var sourceUri by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(job?.sourceId) {
@@ -1520,18 +1600,36 @@ private fun TranscriptScreen(
         ).collectAsStateWithLifecycle(emptyList())
     val segments =
         remember(chunks, rawSegments) { TranscriptAssembler().assemble(chunks, rawSegments) }
+    val corrections by graph.transcriptCorrections
+        .observe(jobId)
+        .collectAsStateWithLifecycle(emptyMap())
+    val correctedSegments =
+        remember(segments, corrections) { applyTranscriptCorrections(segments, corrections) }
     val previewSegments by graph.liveTranscript
         .observe(jobId)
         .collectAsStateWithLifecycle(emptyList())
-    val visibleSegments = segments + previewSegments
+    val visibleSegments =
+        visibleTranscriptSegments(correctedSegments, previewSegments, job?.status)
+    val playbackPreferences = remember { TranscriptPlaybackPreferences(context.applicationContext) }
     val player =
-        remember {
+        remember(jobId) {
             TranscriptPlaybackController(
                 scope = scope,
                 backendFactory = { AndroidMediaPlayerBackend(context.applicationContext) },
             )
         }
     val playback by player.state.collectAsStateWithLifecycle()
+    var editTarget by remember {
+        mutableStateOf<io.github.surioustype.localscribe.core.model.TranscriptSegment?>(null)
+    }
+    var editText by rememberSaveable { mutableStateOf("") }
+    var editError by remember { mutableStateOf<String?>(null) }
+    var undoLastEdit by remember(jobId) {
+        mutableStateOf<Pair<TranscriptSegment, String>?>(null)
+    }
+    var followPlayback by rememberSaveable { mutableStateOf(true) }
+    var programmaticScroll by remember { mutableStateOf(false) }
+    var showSpeedMenu by remember { mutableStateOf(false) }
     val save =
         rememberLauncherForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
@@ -1552,8 +1650,14 @@ private fun TranscriptScreen(
                                 completeExport(false)
                                 return@launch
                             }
-                    runCatching { TranscriptExporter(context).write(uri, source, segments, format) }
-                        .onSuccess { completeExport(true) }
+                    runCatching {
+                        TranscriptExporter(context).write(
+                            uri,
+                            source,
+                            correctedSegments,
+                            format,
+                        )
+                    }.onSuccess { completeExport(true) }
                         .onFailure { completeExport(false) }
                 }
             } else {
@@ -1563,276 +1667,616 @@ private fun TranscriptScreen(
     DisposableEffect(lifecycleOwner) {
         val observer =
             LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_STOP) player.onStop()
+                if (event == Lifecycle.Event.ON_STOP) {
+                    playbackPreferences.savePosition(jobId, player.state.value.positionMs)
+                    player.onStop()
+                }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            playbackPreferences.savePosition(jobId, player.state.value.positionMs)
             player.close()
+        }
+    }
+    LaunchedEffect(player, jobId) {
+        var lastPosition = -1L
+        player.state.collect { current ->
+            val moved = kotlin.math.abs(current.positionMs - lastPosition) >= 2_000L
+            if (current.sourceUri != null && (moved || !current.isPlaying)) {
+                playbackPreferences.savePosition(jobId, current.positionMs)
+                lastPosition = current.positionMs
+            }
         }
     }
     val filtered =
         remember(visibleSegments, query) {
-            visibleSegments.filter { it.text.contains(query, ignoreCase = true) }
+            searchableTranscriptSegments(visibleSegments, query)
         }
     val transcriptListState = rememberLazyListState()
+    val readingPositionStore = remember(context) { TranscriptReadingPositionStore(context) }
+    val savedReadingPosition = remember(jobId) { readingPositionStore.read(jobId) }
+    var pendingReadingRestore by remember(jobId) {
+        mutableStateOf(savedReadingPosition != null)
+    }
+    val versionHeader = if (versions.isNotEmpty()) 1 else 0
+    val rerunHeader = if (job?.status == JobStatus.COMPLETED) 1 else 0
+    val transcriptRowOffset = versionHeader + rerunHeader + 3
+    val activeIndex =
+        remember(filtered, playback.positionMs) {
+            activeTranscriptSegmentIndex(filtered, playback.positionMs)
+        }
+    LaunchedEffect(transcriptListState) {
+        snapshotFlow { transcriptListState.isScrollInProgress }
+            .collect { isScrolling ->
+                if (isScrolling && !programmaticScroll) followPlayback = false
+            }
+    }
+    LaunchedEffect(
+        jobId,
+        savedReadingPosition,
+        filtered,
+        transcriptRowOffset,
+        seekToMs,
+        query,
+        versions,
+    ) {
+        if (pendingReadingRestore) {
+            if (seekToMs != null || query.isNotBlank()) {
+                pendingReadingRestore = false
+            } else if (
+                filtered.isNotEmpty() &&
+                (job?.status != JobStatus.COMPLETED || versions.any { it.id == jobId })
+            ) {
+                val position = savedReadingPosition
+                val segmentIndex =
+                    filtered.indexOfFirst { it.id == position?.segmentId }
+                pendingReadingRestore = false
+                if (position != null && (position.segmentId == null || segmentIndex >= 0)) {
+                    programmaticScroll = true
+                    try {
+                        val targetIndex =
+                            if (position.segmentId == null) {
+                                0
+                            } else {
+                                segmentIndex + transcriptRowOffset
+                            }
+                        transcriptListState.scrollToItem(targetIndex, position.offsetPx)
+                    } finally {
+                        programmaticScroll = false
+                    }
+                }
+            }
+        }
+    }
+    LaunchedEffect(transcriptListState, filtered, transcriptRowOffset, pendingReadingRestore) {
+        snapshotFlow {
+            Triple(
+                transcriptListState.isScrollInProgress,
+                transcriptListState.firstVisibleItemIndex,
+                transcriptListState.firstVisibleItemScrollOffset,
+            )
+        }.collect { (scrolling, index, offset) ->
+            if (!scrolling && !pendingReadingRestore && filtered.isNotEmpty()) {
+                val segment = filtered.getOrNull(index - transcriptRowOffset)
+                readingPositionStore.save(jobId, segment?.id, offset)
+            }
+        }
+    }
+    val latestFiltered by rememberUpdatedState(filtered)
+    val latestRowOffset by rememberUpdatedState(transcriptRowOffset)
+    val readingPositionReady by rememberUpdatedState(!pendingReadingRestore)
+    DisposableEffect(jobId, transcriptListState) {
+        onDispose {
+            if (readingPositionReady && latestFiltered.isNotEmpty()) {
+                val index = transcriptListState.firstVisibleItemIndex - latestRowOffset
+                val segmentId = latestFiltered.getOrNull(index)?.id
+                readingPositionStore.save(
+                    jobId,
+                    segmentId,
+                    transcriptListState.firstVisibleItemScrollOffset,
+                )
+            }
+        }
+    }
+    LaunchedEffect(
+        activeIndex,
+        followPlayback,
+        playback.isPlaying,
+        transcriptRowOffset,
+        pendingReadingRestore,
+    ) {
+        if (
+            !pendingReadingRestore &&
+            shouldAutoFollowTranscript(followPlayback, playback.isPlaying, activeIndex)
+        ) {
+            val index = requireNotNull(activeIndex)
+            programmaticScroll = true
+            try {
+                transcriptListState.animateScrollToItem(index + transcriptRowOffset)
+            } finally {
+                programmaticScroll = false
+            }
+        }
+    }
     LaunchedEffect(seekToMs, filtered, versions.size, job?.status) {
         if (seekToMs != null && filtered.isNotEmpty()) {
             val nearest =
                 filtered.indices.minByOrNull {
                     kotlin.math.abs(filtered[it].absoluteStartMs - seekToMs)
                 } ?: 0
-            val versionHeader =
-                if (versions.size > 1 ||
-                    (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)
-                ) {
-                    1
-                } else {
-                    0
-                }
-            val rerunButton = if (job?.status == JobStatus.COMPLETED) 1 else 0
-            transcriptListState.scrollToItem(nearest + versionHeader + rerunButton + 3)
+            programmaticScroll = true
+            try {
+                transcriptListState.scrollToItem(nearest + transcriptRowOffset)
+            } finally {
+                programmaticScroll = false
+            }
         }
     }
     var showExport by remember { mutableStateOf(false) }
-    LaunchedEffect(sourceUri, seekToMs) {
-        sourceUri?.let { player.seekTo(it, seekToMs ?: 0L) }
+    LaunchedEffect(sourceUri, seekToMs, jobId) {
+        sourceUri?.let {
+            player.setSpeed(playbackPreferences.speed)
+            player.seekTo(it, seekToMs ?: playbackPreferences.position(jobId))
+        }
     }
-    LazyColumn(
-        state = transcriptListState,
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        // A running rerun still lets the user open an earlier completed transcript.
-        if (versions.size > 1 || (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)) {
-            item {
-                Box {
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = transcriptListState,
+            modifier = Modifier.weight(1f),
+            verticalArrangement =
+                Arrangement.spacedBy(
+                    if (readerMode == TranscriptReadingMode.CONTINUOUS) 2.dp else 12.dp,
+                ),
+        ) {
+            // Completed attempts survive newer running or failed reruns.
+            if (versions.isNotEmpty()) {
+                item {
                     OutlinedButton(onClick = { showVersions = true }) {
+                        val isPrimary =
+                            preferredCompletedTranscript(
+                                versions,
+                                job?.sourceId.orEmpty(),
+                                primaryVersions[job?.sourceId.orEmpty()],
+                            )?.id == jobId
                         Text(
-                            "Версия: " + (job?.config?.modelId ?: "") + " · " +
-                                formatLocalDate(
-                                    job?.completedAtEpochMs ?: job?.updatedAtEpochMs ?: 0L,
-                                ),
+                            "Версии и сравнение · " + versions.size +
+                                (if (isPrimary) " · Основная" else ""),
                         )
-                    }
-                    androidx.compose.material3.DropdownMenu(
-                        expanded = showVersions,
-                        onDismissRequest = { showVersions = false },
-                    ) {
-                        versions.forEach { version ->
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        version.config.modelId + " · " +
-                                            formatLocalDate(
-                                                version.completedAtEpochMs
-                                                    ?: version.updatedAtEpochMs,
-                                            ),
-                                    )
-                                },
-                                onClick = {
-                                    showVersions = false
-                                    onChooseVersion(version.id)
-                                },
-                            )
-                        }
                     }
                 }
             }
-        }
-        item {
-            Card(shape = localScribeShape, colors = localScribeCardColors()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+            item {
+                OutlinedTextField(
+                    query,
+                    setQuery,
+                    label = { Text("Поиск по тексту") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                )
+            }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        FilterChip(
+                            selected = readerMode == TranscriptReadingMode.CONTINUOUS,
+                            onClick = { setReadingMode(TranscriptReadingMode.CONTINUOUS) },
+                            label = { Text("Сплошной текст") },
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = readerMode == TranscriptReadingMode.TIMECODES,
+                            onClick = { setReadingMode(TranscriptReadingMode.TIMECODES) },
+                            label = { Text("С таймкодами") },
+                        )
+                    }
+                }
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text("Оригинальная запись", style = MaterialTheme.typography.titleMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
+                    IconButton(
+                        enabled = correctedSegments.isNotEmpty(),
+                        onClick = {
+                            clipboard.setText(
+                                AnnotatedString(correctedSegments.joinToString("\n") { it.text }),
+                            )
+                        },
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = "Копировать текст")
+                    }
+                    IconButton(
+                        enabled = correctedSegments.isNotEmpty(),
+                        onClick = {
                             scope.launch {
                                 val source =
                                     job?.let {
                                         graph.audioRepository.getSource(it.sourceId)?.source
                                     } ?: return@launch
-                                if (playback.isPlaying) player.pause() else player.play(source.uri)
+                                runCatching {
+                                    TranscriptExporter(context).share(
+                                        source,
+                                        correctedSegments,
+                                        ExportFormat.TXT,
+                                    )
+                                }.onSuccess {
+                                    setStatus("Текст отправлен")
+                                }.onFailure {
+                                    setStatus("Не удалось поделиться текстом")
+                                }
                             }
-                        }) {
-                            Icon(
-                                if (playback.isPlaying) {
-                                    Icons.Default.Pause
-                                } else {
-                                    Icons.Default.PlayArrow
-                                },
-                                contentDescription = null,
-                            )
-                            Text(if (playback.isPlaying) "Пауза" else "Воспроизвести")
-                        }
-                    }
-                    Slider(
-                        value =
-                            playback.positionMs
-                                .coerceIn(
-                                    0L,
-                                    playback.durationMs.coerceAtLeast(1L),
-                                ).toFloat(),
-                        onValueChange = { position ->
-                            sourceUri?.let { player.seekTo(it, position.toLong()) }
                         },
-                        valueRange = 0f..playback.durationMs.coerceAtLeast(1L).toFloat(),
-                        modifier =
-                            Modifier.fillMaxWidth().semantics {
-                                contentDescription = "Позиция воспроизведения"
-                            },
-                    )
-                    Text(
-                        formatAudioDuration(playback.positionMs) + " / " +
-                            formatAudioDuration(playback.durationMs),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    playback.errorMessage?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = "Поделиться текстом")
+                    }
+                    IconButton(
+                        enabled = correctedSegments.isNotEmpty(),
+                        onClick = { showExport = true },
+                    ) {
+                        Icon(
+                            Icons.Default.FileDownload,
+                            contentDescription = "Экспортировать текст",
+                        )
                     }
                 }
             }
+            if (job?.status == JobStatus.COMPLETED) {
+                item {
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { job?.sourceId?.let(onRetranscribe) },
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Настроить повторное распознавание")
+                    }
+                }
+            }
+            if (visibleSegments.isEmpty()) {
+                item {
+                    Card(shape = localScribeShape, colors = localScribeCardColors()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(22.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                if (job?.status == JobStatus.COMPLETED) {
+                                    "Речь не обнаружена"
+                                } else {
+                                    "Текст пока не готов"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                if (job?.status == JobStatus.COMPLETED) {
+                                    "Обработка завершилась, но распознанных фрагментов нет. " +
+                                        "Попробуйте другую модель или проверьте, есть ли речь в аудио."
+                                } else {
+                                    "Распознанные фрагменты появятся здесь по мере " +
+                                        "завершения обработки частей записи."
+                                },
+                            )
+                        }
+                    }
+                }
+            } else if (filtered.isEmpty()) {
+                item { Text("По запросу ничего не найдено.") }
+            }
+            items(filtered, key = { it.id }) { segment ->
+                val original = segments.firstOrNull { it.id == segment.id }
+                val corrected =
+                    original?.let { source ->
+                        corrections[source.id]?.takeIf { correction ->
+                            correction.originalText == source.text
+                        }
+                    }
+                if (readerMode == TranscriptReadingMode.CONTINUOUS) {
+                    TranscriptContinuousParagraph(
+                        segment = segment,
+                        query = query,
+                        active = activeIndex != null && filtered[activeIndex].id == segment.id,
+                        onSeek = {
+                            sourceUri?.let { player.seekTo(it, segment.absoluteStartMs) }
+                        },
+                    )
+                } else {
+                    Card(
+                        colors =
+                            if (activeIndex != null && filtered[activeIndex].id == segment.id) {
+                                androidx.compose.material3.CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                )
+                            } else {
+                                localScribeCardColors()
+                            },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier =
+                            Modifier.fillMaxWidth().clickable {
+                                scope.launch {
+                                    val uri =
+                                        job?.let {
+                                            graph.audioRepository
+                                                .getSource(it.sourceId)
+                                                ?.source
+                                                ?.uri
+                                        }
+                                    uri?.let { player.seekTo(it, segment.absoluteStartMs) }
+                                }
+                            },
+                    ) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                formatAudioDuration(segment.absoluteStartMs),
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                            Text(segment.text, style = MaterialTheme.typography.bodyLarge)
+                            if (corrected != null) {
+                                Text("Исправлено", style = MaterialTheme.typography.labelSmall)
+                            }
+                            if (original != null && !segment.id.startsWith("preview-")) {
+                                TextButton(
+                                    onClick = {
+                                        editTarget = original
+                                        editError = null
+                                        editText = corrected?.editedText ?: original.text
+                                    },
+                                    modifier =
+                                        Modifier.semantics {
+                                            contentDescription = "Редактировать фрагмент"
+                                        },
+                                ) {
+                                    Text("Редактировать")
+                                }
+                            }
+                            if (segment.id.startsWith("preview-")) {
+                                Text(
+                                    "Распознаётся · предварительный текст",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+            item { Spacer(Modifier.height(16.dp)) }
         }
-        item {
-            OutlinedTextField(
-                query,
-                setQuery,
-                label = { Text("Поиск по тексту") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-            )
-        }
-        item {
+        undoLastEdit?.let { (original, previousText) ->
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
             ) {
-                IconButton(
-                    enabled = segments.isNotEmpty(),
-                    onClick = {
-                        clipboard.setText(AnnotatedString(segments.joinToString("\n") { it.text }))
-                    },
-                ) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Копировать текст")
-                }
-                IconButton(
-                    enabled = segments.isNotEmpty(),
+                Text(
+                    "Последнее исправление можно отменить",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                TextButton(
                     onClick = {
                         scope.launch {
-                            val source =
-                                job?.let {
-                                    graph.audioRepository.getSource(it.sourceId)?.source
-                                } ?: return@launch
                             runCatching {
-                                TranscriptExporter(context).share(
-                                    source,
-                                    segments,
-                                    ExportFormat.TXT,
-                                )
+                                graph.transcriptCorrections.save(jobId, original, previousText)
                             }.onSuccess {
-                                setStatus("Текст отправлен")
+                                undoLastEdit = null
                             }.onFailure {
-                                setStatus("Не удалось поделиться текстом")
+                                setStatus("Не удалось отменить исправление")
                             }
                         }
                     },
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = "Поделиться текстом")
-                }
-                IconButton(
-                    enabled = segments.isNotEmpty(),
-                    onClick = { showExport = true },
-                ) {
-                    Icon(Icons.Default.FileDownload, contentDescription = "Экспортировать текст")
-                }
+                ) { Text("Отменить правку") }
             }
         }
-        if (job?.status == JobStatus.COMPLETED) {
-            item {
-                OutlinedButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { job?.sourceId?.let(onRetranscribe) },
-                ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Распознать заново")
-                }
-            }
+        if (!followPlayback) {
+            TextButton(
+                onClick = {
+                    followPlayback = true
+                    activeIndex?.let { index ->
+                        scope.launch {
+                            programmaticScroll = true
+                            try {
+                                transcriptListState.animateScrollToItem(
+                                    index + transcriptRowOffset,
+                                )
+                            } finally {
+                                programmaticScroll = false
+                            }
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Вернуться к воспроизведению") }
         }
-        if (visibleSegments.isEmpty()) {
-            item {
-                Card(shape = localScribeShape, colors = localScribeCardColors()) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(22.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
-                    ) {
-                        Text(
-                            if (job?.status == JobStatus.COMPLETED) {
-                                "Речь не обнаружена"
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = localScribeCardColors(),
+            shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Slider(
+                    value =
+                        playback.positionMs
+                            .coerceIn(0L, playback.durationMs.coerceAtLeast(1L))
+                            .toFloat(),
+                    onValueChange = { position ->
+                        sourceUri?.let { player.seekTo(it, position.toLong()) }
+                    },
+                    valueRange = 0f..playback.durationMs.coerceAtLeast(1L).toFloat(),
+                    modifier =
+                        Modifier.fillMaxWidth().semantics {
+                            contentDescription = "Позиция воспроизведения"
+                        },
+                )
+                Text(
+                    formatAudioDuration(playback.positionMs) + " / " +
+                        formatAudioDuration(playback.durationMs),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    TextButton(
+                        onClick = {
+                            sourceUri?.let {
+                                player.seekTo(
+                                    it,
+                                    boundedSeek(playback.positionMs, -10_000L, playback.durationMs),
+                                )
+                            }
+                        },
+                    ) { Text("−10 с") }
+                    IconButton(onClick = {
+                        sourceUri?.let {
+                            if (playback.isPlaying) player.pause() else player.play(it)
+                        }
+                    }) {
+                        Icon(
+                            if (playback.isPlaying) {
+                                Icons.Default.Pause
                             } else {
-                                "Текст пока не готов"
+                                Icons.Default.PlayArrow
                             },
-                            style = MaterialTheme.typography.titleMedium,
-                        )
-                        Text(
-                            if (job?.status == JobStatus.COMPLETED) {
-                                "Обработка завершилась, но распознанных фрагментов нет. " +
-                                    "Попробуйте другую модель или проверьте, есть ли речь в аудио."
-                            } else {
-                                "Распознанные фрагменты появятся здесь по мере " +
-                                    "завершения обработки частей записи."
-                            },
+                            contentDescription =
+                                if (playback.isPlaying) "Пауза" else "Воспроизвести",
                         )
                     }
+                    TextButton(
+                        onClick = {
+                            sourceUri?.let {
+                                player.seekTo(
+                                    it,
+                                    boundedSeek(playback.positionMs, 10_000L, playback.durationMs),
+                                )
+                            }
+                        },
+                    ) { Text("+10 с") }
+                    Box {
+                        TextButton(onClick = { showSpeedMenu = true }) {
+                            Text(playback.speed.toString() + "×")
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = showSpeedMenu,
+                            onDismissRequest = { showSpeedMenu = false },
+                        ) {
+                            listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { speed ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(speed.toString() + "×") },
+                                    onClick = {
+                                        showSpeedMenu = false
+                                        playbackPreferences.speed = speed
+                                        player.setSpeed(speed)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                playback.errorMessage?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
-        } else if (filtered.isEmpty()) {
-            item { Text("По запросу ничего не найдено.") }
         }
-        items(filtered, key = { it.id }) { segment ->
-            Card(
-                colors = localScribeCardColors(),
-                shape = RoundedCornerShape(14.dp),
-                modifier =
-                    Modifier.fillMaxWidth().clickable {
-                        scope.launch {
-                            val uri =
-                                job?.let {
-                                    graph.audioRepository
-                                        .getSource(it.sourceId)
-                                        ?.source
-                                        ?.uri
+    }
+    if (showVersions && job != null && versions.isNotEmpty()) {
+        TranscriptVersionsSheet(
+            graph = graph,
+            current = requireNotNull(job),
+            versions = versions,
+            primaryId = primaryVersions[job?.sourceId.orEmpty()],
+            onChooseVersion = onChooseVersion,
+            onDismiss = { showVersions = false },
+            onStatus = setStatus,
+        )
+    }
+    BackHandler(enabled = showExport || editTarget != null) {
+        if (editTarget != null) editTarget = null else showExport = false
+    }
+    editTarget?.let { original ->
+        val correction =
+            corrections[original.id]?.takeIf { it.originalText == original.text }
+        AlertDialog(
+            onDismissRequest = { editTarget = null },
+            title = { Text("Редактировать фрагмент") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Исходный текст Whisper сохраняется отдельно.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedTextField(
+                        value = editText,
+                        onValueChange = { editText = it.take(50_000) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Исправленный текст") },
+                        minLines = 3,
+                        maxLines = 9,
+                    )
+                    editError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                    }
+                    if (correction != null) {
+                        Text(
+                            "Оригинал: " + original.text,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        TextButton(onClick = {
+                            scope.launch {
+                                runCatching {
+                                    graph.transcriptCorrections.restore(jobId, original.id)
+                                }.onSuccess {
+                                    undoLastEdit = original to correction.editedText
+                                    editTarget = null
+                                }.onFailure {
+                                    editError = "Не удалось восстановить исходный текст"
                                 }
-                            uri?.let { player.seekTo(it, segment.absoluteStartMs) }
+                            }
+                        }) { Text("Восстановить оригинал") }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = editText.isNotBlank(),
+                    onClick = {
+                        val newText = editText
+                        val previousText = correction?.editedText ?: original.text
+                        scope.launch {
+                            runCatching {
+                                graph.transcriptCorrections.save(jobId, original, newText)
+                            }.onSuccess {
+                                if (newText != previousText) {
+                                    undoLastEdit = original to previousText
+                                }
+                                editTarget = null
+                            }.onFailure {
+                                editError = "Не удалось сохранить исправление"
+                            }
                         }
                     },
-            ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
-                ) {
-                    Text(
-                        formatAudioDuration(segment.absoluteStartMs),
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                    Text(segment.text, style = MaterialTheme.typography.bodyLarge)
-                    if (segment.id.startsWith("preview-")) {
-                        Text(
-                            "Распознаётся · предварительный текст",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                }
-            }
-        }
-        item { Spacer(Modifier.height(16.dp)) }
+                ) { Text("Сохранить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editTarget = null }) { Text("Отмена") }
+            },
+        )
     }
-    BackHandler(enabled = showExport) { showExport = false }
     if (showExport) {
         ModalBottomSheet(onDismissRequest = { showExport = false }) {
             Column(
@@ -1843,7 +2287,7 @@ private fun TranscriptScreen(
                 ExportFormat.entries.forEach { format ->
                     OutlinedButton(
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = segments.isNotEmpty(),
+                        enabled = correctedSegments.isNotEmpty(),
                         onClick = {
                             showExport = false
                             setExportFormat(format.name)

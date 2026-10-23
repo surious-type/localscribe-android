@@ -289,6 +289,94 @@ class RoomTranscriptionRepositoryTest {
         }
 
     @Test
+    fun explicitlyRetryingFailedJobProcessesOnlyUnfinishedChunkAndKeepsSavedText() =
+        runTest {
+            repository.createJob(job(), listOf(chunk("chunk-1", 0), chunk("chunk-2", 90_000)))
+            repository.resumeJob(JOB_ID, 2)
+            repository.claimNextChunk(JOB_ID, 3)
+            repository.completeChunk(
+                "chunk-1",
+                listOf(TranscriptSegment("saved", "chunk-1", 100, 500, "first")),
+                4,
+            )
+            repository.claimNextChunk(JOB_ID, 5)
+            val failure =
+                io.github.surioustype.localscribe.core.model.DomainFailure(
+                    io.github.surioustype.localscribe.core.model.FailureCode.NATIVE_FAILURE,
+                    "temporary_native_error",
+                )
+            repository.failChunk("chunk-2", failure, 6)
+            repository.failJob(JOB_ID, failure, 7)
+            assertEquals(JobStatus.FAILED, repository.getJob(JOB_ID)?.status)
+
+            repository.resumeJob(JOB_ID, 8)
+            val retried = repository.claimNextChunk(JOB_ID, 9)
+            assertEquals("chunk-2", retried?.id)
+            assertEquals(2, retried?.attempt)
+            repository.completeChunk(
+                "chunk-2",
+                listOf(TranscriptSegment("recovered", "chunk-2", 90_100, 90_500, "second")),
+                10,
+            )
+            repository.completeJob(JOB_ID, 11)
+
+            assertEquals(JobStatus.COMPLETED, repository.getJob(JOB_ID)?.status)
+            assertEquals(
+                listOf("first", "second"),
+                repository.observeSegments(JOB_ID).first().map { it.text },
+            )
+            assertEquals(
+                listOf(ChunkStatus.COMPLETED, ChunkStatus.COMPLETED),
+                repository.observeChunks(JOB_ID).first().map { it.status },
+            )
+        }
+
+    @Test
+    fun pendingPauseSurvivesColdRecoveryWithoutStartingTheModel() =
+        runTest {
+            repository.createJob(job(), listOf(chunk("chunk-1", 0), chunk("chunk-2", 90_000)))
+            repository.pauseJob(JOB_ID, 2)
+            repository.recoverInterrupted(3)
+
+            assertEquals(JobStatus.PAUSED, repository.getJob(JOB_ID)?.status)
+            assertEquals(
+                listOf(ChunkStatus.PAUSED, ChunkStatus.PAUSED),
+                repository.observeChunks(JOB_ID).first().map { it.status },
+            )
+            repository.resumeJob(JOB_ID, 4)
+            assertEquals(JobStatus.RUNNING, repository.getJob(JOB_ID)?.status)
+            assertEquals(
+                listOf(ChunkStatus.PENDING, ChunkStatus.PENDING),
+                repository.observeChunks(JOB_ID).first().map { it.status },
+            )
+        }
+
+    @Test
+    fun cancellationPreservesAlreadyCompletedTextAndRejectsLatePreviewCommit() =
+        runTest {
+            repository.createJob(job(), listOf(chunk("chunk-1", 0), chunk("chunk-2", 90_000)))
+            repository.resumeJob(JOB_ID, 2)
+            repository.claimNextChunk(JOB_ID, 3)
+            repository.completeChunk(
+                "chunk-1",
+                listOf(TranscriptSegment("saved", "chunk-1", 100, 500, "permanent")),
+                4,
+            )
+            repository.claimNextChunk(JOB_ID, 5)
+            repository.cancelJob(JOB_ID, 6)
+
+            assertEquals(JobStatus.CANCELLED, repository.getJob(JOB_ID)?.status)
+            assertEquals(
+                listOf("permanent"),
+                repository.observeSegments(JOB_ID).first().map { it.text },
+            )
+            assertEquals(
+                listOf(ChunkStatus.COMPLETED, ChunkStatus.CANCELLED),
+                repository.observeChunks(JOB_ID).first().map { it.status },
+            )
+        }
+
+    @Test
     fun repeatedPauseIsIdempotent() =
         runTest {
             repository.createJob(job(), listOf(chunk("chunk-1", 0)))

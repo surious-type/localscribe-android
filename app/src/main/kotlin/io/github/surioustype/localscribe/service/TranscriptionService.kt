@@ -15,6 +15,7 @@ import io.github.surioustype.localscribe.R
 import io.github.surioustype.localscribe.core.model.ChunkStatus
 import io.github.surioustype.localscribe.core.model.DomainFailure
 import io.github.surioustype.localscribe.core.model.FailureCode
+import io.github.surioustype.localscribe.core.model.JobStatus
 import io.github.surioustype.localscribe.core.ports.AudioRepository
 import io.github.surioustype.localscribe.execution.AndroidThermalMonitor
 import io.github.surioustype.localscribe.execution.DurableTranscriptionRepository
@@ -26,12 +27,14 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
 interface ServiceDependencies {
     val coordinator: TranscriptionCoordinator
+    val queuePriorities: DurableQueuePriorities
     val repository: DurableTranscriptionRepository
     val audioRepository: AudioRepository
     val thermalMonitor: AndroidThermalMonitor
@@ -51,6 +54,8 @@ class TranscriptionService : Service() {
     private lateinit var executionQueue: SerialExecutionQueue
     private var notificationJob: Job? = null
     private var thermalJob: Job? = null
+    private val manualResumeIds = mutableSetOf<String>()
+    private var latestStartId = 0
 
     override fun onCreate() {
         super.onCreate()
@@ -60,15 +65,24 @@ class TranscriptionService : Service() {
         executionQueue =
             SerialExecutionQueue(
                 scope = serviceScope,
-                execute = { jobId -> dependencies.coordinator.execute(jobId) },
+                execute = { jobId ->
+                    val status = dependencies.repository.getJob(jobId)?.status
+                    val explicitlyResumed = manualResumeIds.remove(jobId)
+                    val canResume =
+                        (status == JobStatus.PAUSED || status == JobStatus.FAILED) &&
+                            explicitlyResumed
+                    if (status == JobStatus.PENDING || canResume) {
+                        dependencies.coordinator.execute(jobId)
+                    }
+                },
                 onStarted = { jobId ->
                     controlRouting.executionStarted(jobId)
                     startForegroundCompat(jobId, 0, 0)
                     observeProgress(jobId)
                 },
-                onIdle = { startId ->
+                onIdle = { _ ->
                     controlRouting.executionIdle()
-                    stopForegroundAndSelf(startId)
+                    stopForegroundAndSelf(latestStartId)
                 },
             )
         createNotificationChannel()
@@ -96,22 +110,31 @@ class TranscriptionService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val action = intent?.action ?: return START_NOT_STICKY
-        val jobId = intent.getStringExtra(EXTRA_JOB_ID) ?: return START_NOT_STICKY
-        if (action == ACTION_START || action == ACTION_RESUME) {
-            startForegroundCompat(controlRouting.notificationJobIdFor(jobId), 0, 0)
+        val jobId = intent.getStringExtra(EXTRA_JOB_ID)
+        latestStartId = startId
+        if (action in setOf(ACTION_START, ACTION_RESUME, ACTION_REORDER)) {
+            startForegroundCompat(
+                controlRouting.notificationJobIdFor(jobId ?: "queue"),
+                0,
+                0,
+            )
             serviceScope.launch {
                 actionMutex.withLock {
                     ServiceStartRecoveryGate(
                         recover = dependencies::awaitStartupRecovery,
-                        queue = { queuedJobId, queuedStartId ->
-                            executionQueue.request(queuedJobId, queuedStartId)
+                        queue = { _, queuedStartId ->
+                            if (action == ACTION_RESUME && jobId != null) {
+                                manualResumeIds += jobId
+                            }
+                            rebuildQueue(queuedStartId)
                         },
                         onFailure = { stopForegroundAndSelf(startId) },
-                    ).start(jobId, startId)
+                    ).start(jobId ?: "queue", startId)
                 }
             }
             return START_NOT_STICKY
         }
+        if (jobId == null) return START_NOT_STICKY
         serviceScope.launch {
             actionMutex.withLock {
                 when (action) {
@@ -121,6 +144,34 @@ class TranscriptionService : Service() {
             }
         }
         return START_NOT_STICKY
+    }
+
+    /** Rebuild pending execution from Room. Paused jobs are resumed only on user request. */
+    private suspend fun rebuildQueue(startId: Int) {
+        val jobs = dependencies.repository.observeJobs().first()
+        val resumable =
+            jobs
+                .filter {
+                    it.status == JobStatus.PAUSED || it.status == JobStatus.FAILED
+                }.map { it.id }
+                .toSet()
+        manualResumeIds.retainAll(resumable)
+        val eligible =
+            jobs.filter { it.status == JobStatus.PENDING || it.id in manualResumeIds }
+        val ready =
+            eligible.map { candidate ->
+                if (candidate.id in manualResumeIds) {
+                    candidate.copy(status = JobStatus.PENDING)
+                } else {
+                    candidate
+                }
+            }
+        val ordered =
+            pendingTranscriptionQueue(
+                ready,
+                dependencies.queuePriorities.priorities.value,
+            ).map { it.id }
+        executionQueue.schedule(ordered, startId)
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -153,12 +204,16 @@ class TranscriptionService : Service() {
 
     private suspend fun pause(jobId: String, startId: Int) {
         dependencies.coordinator.pause(jobId)
-        stopForegroundAndSelf(startId)
+        manualResumeIds.remove(jobId)
+        executionQueue.remove(jobId)
+        rebuildQueue(startId)
     }
 
     private suspend fun cancel(jobId: String, startId: Int) {
         dependencies.coordinator.cancel(jobId)
-        stopForegroundAndSelf(startId)
+        manualResumeIds.remove(jobId)
+        executionQueue.remove(jobId)
+        rebuildQueue(startId)
     }
 
     private fun observeProgress(jobId: String) {
@@ -251,9 +306,9 @@ class TranscriptionService : Service() {
                     actionIntent(ACTION_PAUSE, jobId, 1),
                 ).addAction(
                     0,
-                    getString(R.string.action_resume),
-                    actionIntent(ACTION_RESUME, jobId, 2),
-                ).addAction(0, getString(R.string.action_stop), actionIntent(ACTION_STOP, jobId, 3))
+                    getString(R.string.action_stop),
+                    actionIntent(ACTION_STOP, jobId, 3),
+                )
         return builder.build()
     }
 
@@ -297,6 +352,7 @@ class TranscriptionService : Service() {
         const val ACTION_RESUME = "io.github.surioustype.localscribe.action.RESUME_TRANSCRIPTION"
         const val ACTION_PAUSE = "io.github.surioustype.localscribe.action.PAUSE_TRANSCRIPTION"
         const val ACTION_STOP = "io.github.surioustype.localscribe.action.STOP_TRANSCRIPTION"
+        const val ACTION_REORDER = "io.github.surioustype.localscribe.action.REORDER_QUEUE"
         const val EXTRA_JOB_ID = "job_id"
         private const val CHANNEL_ID = "transcription"
         private const val NOTIFICATION_ID = 1001

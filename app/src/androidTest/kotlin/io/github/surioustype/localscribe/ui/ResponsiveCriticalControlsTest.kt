@@ -11,7 +11,11 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.dp
+import io.github.surioustype.localscribe.core.model.AudioSource
+import io.github.surioustype.localscribe.core.model.AudioSourceRecord
+import io.github.surioustype.localscribe.core.model.SourceAccessStatus
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -74,6 +78,58 @@ class ResponsiveCriticalControlsTest {
         }
         rule.onNodeWithText("Проверять обновления автоматически").assertIsDisplayed()
         rule.onNodeWithText("Проверка GitHub Releases без отправки записей.").assertIsDisplayed()
+    }
+
+    @Test
+    fun narrowLargeFontRecordingStillExposesActionsAndStatus() {
+        var renameRequested = false
+        val record =
+            AudioSourceRecord(
+                source = AudioSource("id", "content://audio/1", "Лекция", 120_000L, "audio/wav"),
+                accessStatus = SourceAccessStatus.AVAILABLE,
+                hasPersistedPermission = false,
+            )
+        rule.setContent {
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides Density(1f, fontScale = 1.8f),
+            ) {
+                Box(Modifier.width(300.dp)) {
+                    LibraryRecordingCard(
+                        record = record,
+                        presentation = libraryRecordPresentation(record, emptyList()),
+                        hasTranscript = false,
+                        onOpen = {},
+                        onRename = { renameRequested = true },
+                        onRetranscribe = {},
+                    )
+                }
+            }
+        }
+        rule.onNodeWithText("Без расшифровки").assertIsDisplayed()
+        rule.onNodeWithContentDescription("Действия с записью Лекция").performClick()
+        rule.onNodeWithText("Переименовать").assertIsDisplayed().performClick()
+        assertTrue(renameRequested)
+    }
+
+    @Test
+    fun actionableEmptyLibraryCanStartImportOnSmallScreen() {
+        var importRequested = false
+        rule.setContent {
+            CompositionLocalProvider(
+                androidx.compose.ui.platform.LocalDensity provides Density(1f, fontScale = 1.8f),
+            ) {
+                Box(Modifier.width(300.dp)) {
+                    LibraryEmptyState(
+                        title = "Записей пока нет",
+                        description = "Добавьте аудиофайл.",
+                        actionLabel = "Импортировать аудио",
+                        onAction = { importRequested = true },
+                    )
+                }
+            }
+        }
+        rule.onNodeWithText("Импортировать аудио").assertIsDisplayed().performClick()
+        assertTrue(importRequested)
     }
 
     @Test

@@ -146,14 +146,15 @@ class AndroidAudioRepository(
                         if (record.accessStatus != SourceAccessStatus.AVAILABLE) {
                             record
                         } else {
-                            record
-                                .copy(
-                                    contentFingerprint = fingerprint(Uri.parse(record.source.uri)),
-                                ).also {
-                                    if (it.contentFingerprint != record.contentFingerprint) {
-                                        store.upsert(it)
-                                    }
-                                }
+                            val verified =
+                                verifyWithoutReplacingPinnedFingerprint(
+                                    record,
+                                    fingerprint(Uri.parse(record.source.uri)),
+                                )
+                            if (verified.shouldPersist) {
+                                store.upsert(verified.observedRecord)
+                            }
+                            verified.observedRecord
                         }
                     }
             }

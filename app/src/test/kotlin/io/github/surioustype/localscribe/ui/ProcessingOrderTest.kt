@@ -23,14 +23,14 @@ class ProcessingOrderTest {
     }
 
     @Test
-    fun `cancelled tasks are hidden without changing order`() {
+    fun `cancelled tasks remain visible so prior fragments can be inspected`() {
         val jobs =
             listOf(
                 job("old", JobStatus.COMPLETED, 10),
                 job("cancelled", JobStatus.CANCELLED, 30),
                 job("new", JobStatus.PENDING, 20),
             )
-        assertEquals(listOf("new", "old"), visibleProcessingJobs(jobs).map { it.id })
+        assertEquals(listOf("cancelled", "new", "old"), visibleProcessingJobs(jobs).map { it.id })
     }
 
     private fun job(id: String, status: JobStatus, createdAt: Long) =

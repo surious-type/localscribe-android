@@ -189,6 +189,21 @@ class LocalScribeUiStateViewModelTest {
     }
 
     @Test
+    fun transcriptReadingModePersistsThroughNavigationAndVersionSelection() {
+        val handle = SavedStateHandle()
+        val first = LocalScribeUiStateViewModel(handle)
+        first.openRecording("source", "old-version")
+        first.setTranscriptReadingMode(TranscriptReadingMode.CONTINUOUS)
+        first.setTranscriptQuery("лекция")
+        first.showTranscript("new-version")
+
+        val restored = LocalScribeUiStateViewModel(handle).uiState.value
+        assertEquals(TranscriptReadingMode.CONTINUOUS.name, restored.transcriptReadingMode)
+        assertEquals("new-version", restored.transcriptJobId)
+        assertEquals("лекция", restored.transcriptQuery)
+    }
+
+    @Test
     fun librarySearchTargetRetainsTimestampAfterRecreation() {
         val handle = SavedStateHandle()
         val model = LocalScribeUiStateViewModel(handle)
