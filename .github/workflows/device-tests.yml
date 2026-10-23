@@ -2,6 +2,13 @@ name: Optional Android device tests
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '.github/workflows/device-tests.yml'
+      - 'app/src/androidTest/**'
+      - 'app/src/main/kotlin/io/github/surioustype/localscribe/ui/**'
+      - 'app/src/main/kotlin/io/github/surioustype/localscribe/service/**'
+      - 'app/src/main/kotlin/io/github/surioustype/localscribe/audio/**'
   push:
     branches: [main]
     paths:

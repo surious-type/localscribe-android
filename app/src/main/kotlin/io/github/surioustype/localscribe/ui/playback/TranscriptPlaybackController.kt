@@ -24,6 +24,7 @@ data class PlaybackState(
     val isPreparing: Boolean = false,
     val isReady: Boolean = false,
     val isPlaying: Boolean = false,
+    val speed: Float = 1f,
     val errorMessage: String? = null,
 )
 
@@ -38,6 +39,8 @@ interface AudioPlayerBackend : AutoCloseable {
     fun pause()
 
     fun seekTo(positionMs: Long)
+
+    fun setSpeed(speed: Float)
 
     fun currentPositionMs(): Long
 
@@ -69,6 +72,7 @@ class TranscriptPlaybackController(
     private var sourceUri: String? = null
     private var requestedPositionMs = 0L
     private var shouldPlayWhenReady = false
+    private var requestedSpeed = 1f
     private var generation = 0L
     private var closed = false
 
@@ -86,6 +90,20 @@ class TranscriptPlaybackController(
             runCatching { it.pause() }
             stopPolling()
             mutableState.value = mutableState.value.copy(isPlaying = false)
+        }
+    }
+
+    /** Applies speed to the active player and to the next prepared backend. */
+    fun setSpeed(value: Float) {
+        if (closed) return
+        val speed = value.coerceIn(0.5f, 2f)
+        requestedSpeed = speed
+        mutableState.value = mutableState.value.copy(speed = speed)
+        backend?.takeIf { mutableState.value.isReady }?.let { active ->
+            runCatching { active.setSpeed(speed) }
+                .onFailure {
+                    mutableState.value = mutableState.value.copy(errorMessage = PLAYBACK_ERROR)
+                }
         }
     }
 
@@ -113,6 +131,7 @@ class TranscriptPlaybackController(
                 isPreparing = false,
                 isReady = false,
                 isPlaying = false,
+                speed = requestedSpeed,
             )
     }
 
@@ -147,6 +166,7 @@ class TranscriptPlaybackController(
             PlaybackState(
                 sourceUri = nextSourceUri,
                 positionMs = requestedPositionMs,
+                speed = requestedSpeed,
                 isPreparing = true,
             )
         preparationJob =
@@ -170,6 +190,7 @@ class TranscriptPlaybackController(
                             isReady = true,
                         )
                     seek(createdBackend, requestedPositionMs)
+                    createdBackend.setSpeed(requestedSpeed)
                     if (shouldPlayWhenReady) start(createdBackend)
                 } catch (cancellation: CancellationException) {
                     throw cancellation
@@ -310,6 +331,13 @@ class AndroidMediaPlayerBackend(
 
     override fun seekTo(positionMs: Long) {
         if (!closed) mediaPlayer.seekTo(positionMs.coerceAtMost(Int.MAX_VALUE.toLong()).toInt())
+    }
+
+    override fun setSpeed(speed: Float) {
+        if (closed) return
+        val wasPlaying = mediaPlayer.isPlaying
+        mediaPlayer.playbackParams = mediaPlayer.playbackParams.setSpeed(speed.coerceIn(0.5f, 2f))
+        if (!wasPlaying && mediaPlayer.isPlaying) mediaPlayer.pause()
     }
 
     override fun currentPositionMs(): Long =

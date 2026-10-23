@@ -23,6 +23,7 @@ import io.github.surioustype.localscribe.models.JsonModelCatalogRepository
 import io.github.surioustype.localscribe.models.SecureModelDownloadManager
 import io.github.surioustype.localscribe.network.HttpsNetworkClient
 import io.github.surioustype.localscribe.service.ServiceDependencies
+import io.github.surioustype.localscribe.ui.TranscriptCorrectionStore
 import io.github.surioustype.localscribe.updates.createAppUpdateManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -42,6 +43,7 @@ class AppGraph(context: Context) {
     val database = LocalScribeDatabase.open(appContext)
     val transcriptionRepository = RoomTranscriptionRepository(database)
     val transcriptSearch = database.transcriptionDao().observeSearchSegments()
+    val transcriptCorrections = TranscriptCorrectionStore(appContext)
     private val sourceStore = RoomAudioSourceStore(database)
     val installedModels = RoomInstalledModelRepository(database)
     private val benchmarkStore = RoomBenchmarkStore(database)

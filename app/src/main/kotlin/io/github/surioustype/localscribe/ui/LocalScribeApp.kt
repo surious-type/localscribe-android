@@ -77,6 +77,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalClipboardManager
@@ -109,6 +110,7 @@ import io.github.surioustype.localscribe.core.model.InferenceConfig
 import io.github.surioustype.localscribe.core.model.InstalledModel
 import io.github.surioustype.localscribe.core.model.JobStatus
 import io.github.surioustype.localscribe.core.model.ModelKind
+import io.github.surioustype.localscribe.core.model.TranscriptSegment
 import io.github.surioustype.localscribe.core.model.TranscriptionConfig
 import io.github.surioustype.localscribe.core.model.TranscriptionJob
 import io.github.surioustype.localscribe.core.model.UpdateAvailability
@@ -118,8 +120,10 @@ import io.github.surioustype.localscribe.di.AppPreferences
 import io.github.surioustype.localscribe.service.TranscriptionService
 import io.github.surioustype.localscribe.ui.playback.AndroidMediaPlayerBackend
 import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackController
+import io.github.surioustype.localscribe.ui.playback.TranscriptPlaybackPreferences
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import java.util.UUID
 
@@ -1381,18 +1385,35 @@ private fun TranscriptScreen(
         ).collectAsStateWithLifecycle(emptyList())
     val segments =
         remember(chunks, rawSegments) { TranscriptAssembler().assemble(chunks, rawSegments) }
+    val corrections by graph.transcriptCorrections
+        .observe(jobId)
+        .collectAsStateWithLifecycle(emptyMap())
+    val correctedSegments =
+        remember(segments, corrections) { applyTranscriptCorrections(segments, corrections) }
     val previewSegments by graph.liveTranscript
         .observe(jobId)
         .collectAsStateWithLifecycle(emptyList())
-    val visibleSegments = segments + previewSegments
+    val visibleSegments = correctedSegments + previewSegments
+    val playbackPreferences = remember { TranscriptPlaybackPreferences(context.applicationContext) }
     val player =
-        remember {
+        remember(jobId) {
             TranscriptPlaybackController(
                 scope = scope,
                 backendFactory = { AndroidMediaPlayerBackend(context.applicationContext) },
             )
         }
     val playback by player.state.collectAsStateWithLifecycle()
+    var editTarget by remember {
+        mutableStateOf<io.github.surioustype.localscribe.core.model.TranscriptSegment?>(null)
+    }
+    var editText by rememberSaveable { mutableStateOf("") }
+    var editError by remember { mutableStateOf<String?>(null) }
+    var undoLastEdit by remember(jobId) {
+        mutableStateOf<Pair<TranscriptSegment, String>?>(null)
+    }
+    var followPlayback by rememberSaveable { mutableStateOf(true) }
+    var programmaticScroll by remember { mutableStateOf(false) }
+    var showSpeedMenu by remember { mutableStateOf(false) }
     val save =
         rememberLauncherForActivityResult(
             ActivityResultContracts.StartActivityForResult(),
@@ -1413,8 +1434,14 @@ private fun TranscriptScreen(
                                 completeExport(false)
                                 return@launch
                             }
-                    runCatching { TranscriptExporter(context).write(uri, source, segments, format) }
-                        .onSuccess { completeExport(true) }
+                    runCatching {
+                        TranscriptExporter(context).write(
+                            uri,
+                            source,
+                            correctedSegments,
+                            format,
+                        )
+                    }.onSuccess { completeExport(true) }
                         .onFailure { completeExport(false) }
                 }
             } else {
@@ -1424,12 +1451,26 @@ private fun TranscriptScreen(
     DisposableEffect(lifecycleOwner) {
         val observer =
             LifecycleEventObserver { _, event ->
-                if (event == Lifecycle.Event.ON_STOP) player.onStop()
+                if (event == Lifecycle.Event.ON_STOP) {
+                    playbackPreferences.savePosition(jobId, player.state.value.positionMs)
+                    player.onStop()
+                }
             }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
+            playbackPreferences.savePosition(jobId, player.state.value.positionMs)
             player.close()
+        }
+    }
+    LaunchedEffect(player, jobId) {
+        var lastPosition = -1L
+        player.state.collect { current ->
+            val moved = kotlin.math.abs(current.positionMs - lastPosition) >= 2_000L
+            if (current.sourceUri != null && (moved || !current.isPlaying)) {
+                playbackPreferences.savePosition(jobId, current.positionMs)
+                lastPosition = current.positionMs
+            }
         }
     }
     val filtered =
@@ -1437,263 +1478,480 @@ private fun TranscriptScreen(
             visibleSegments.filter { it.text.contains(query, ignoreCase = true) }
         }
     val transcriptListState = rememberLazyListState()
+    val versionHeader =
+        if (
+            versions.size > 1 ||
+            (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)
+        ) {
+            1
+        } else {
+            0
+        }
+    val rerunHeader = if (job?.status == JobStatus.COMPLETED) 1 else 0
+    val transcriptRowOffset = versionHeader + rerunHeader + 2
+    val activeIndex =
+        remember(filtered, playback.positionMs) {
+            activeTranscriptSegmentIndex(filtered, playback.positionMs)
+        }
+    LaunchedEffect(transcriptListState) {
+        snapshotFlow { transcriptListState.isScrollInProgress }
+            .collect { isScrolling ->
+                if (isScrolling && !programmaticScroll) followPlayback = false
+            }
+    }
+    LaunchedEffect(activeIndex, followPlayback, playback.isPlaying, transcriptRowOffset) {
+        if (followPlayback && activeIndex != null) {
+            programmaticScroll = true
+            try {
+                transcriptListState.animateScrollToItem(activeIndex + transcriptRowOffset)
+            } finally {
+                programmaticScroll = false
+            }
+        }
+    }
     LaunchedEffect(seekToMs, filtered, versions.size, job?.status) {
         if (seekToMs != null && filtered.isNotEmpty()) {
             val nearest =
                 filtered.indices.minByOrNull {
                     kotlin.math.abs(filtered[it].absoluteStartMs - seekToMs)
                 } ?: 0
-            val versionHeader =
-                if (versions.size > 1 ||
-                    (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)
-                ) {
-                    1
-                } else {
-                    0
-                }
-            val rerunButton = if (job?.status == JobStatus.COMPLETED) 1 else 0
-            transcriptListState.scrollToItem(nearest + versionHeader + rerunButton + 3)
+            programmaticScroll = true
+            try {
+                transcriptListState.scrollToItem(nearest + transcriptRowOffset)
+            } finally {
+                programmaticScroll = false
+            }
         }
     }
     var showExport by remember { mutableStateOf(false) }
-    LaunchedEffect(sourceUri, seekToMs) {
-        sourceUri?.let { player.seekTo(it, seekToMs ?: 0L) }
+    LaunchedEffect(sourceUri, seekToMs, jobId) {
+        sourceUri?.let {
+            player.setSpeed(playbackPreferences.speed)
+            player.seekTo(it, seekToMs ?: playbackPreferences.position(jobId))
+        }
     }
-    LazyColumn(
-        state = transcriptListState,
-        modifier = Modifier.fillMaxSize(),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        // A running rerun still lets the user open an earlier completed transcript.
-        if (versions.size > 1 || (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)) {
-            item {
-                Box {
-                    OutlinedButton(onClick = { showVersions = true }) {
-                        Text(
-                            "Версия: " + (job?.config?.modelId ?: "") + " · " +
-                                formatLocalDate(
-                                    job?.completedAtEpochMs ?: job?.updatedAtEpochMs ?: 0L,
-                                ),
-                        )
-                    }
-                    androidx.compose.material3.DropdownMenu(
-                        expanded = showVersions,
-                        onDismissRequest = { showVersions = false },
-                    ) {
-                        versions.forEach { version ->
-                            androidx.compose.material3.DropdownMenuItem(
-                                text = {
-                                    Text(
-                                        version.config.modelId + " · " +
-                                            formatLocalDate(
-                                                version.completedAtEpochMs
-                                                    ?: version.updatedAtEpochMs,
-                                            ),
-                                    )
-                                },
-                                onClick = {
-                                    showVersions = false
-                                    onChooseVersion(version.id)
-                                },
+    Column(Modifier.fillMaxSize()) {
+        LazyColumn(
+            state = transcriptListState,
+            modifier = Modifier.weight(1f),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // A running rerun still lets the user open an earlier completed transcript.
+            if (versions.size > 1 ||
+                (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)
+            ) {
+                item {
+                    Box {
+                        OutlinedButton(onClick = { showVersions = true }) {
+                            Text(
+                                "Версия: " + (job?.config?.modelId ?: "") + " · " +
+                                    formatLocalDate(
+                                        job?.completedAtEpochMs ?: job?.updatedAtEpochMs ?: 0L,
+                                    ),
                             )
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = showVersions,
+                            onDismissRequest = { showVersions = false },
+                        ) {
+                            versions.forEach { version ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = {
+                                        Text(
+                                            version.config.modelId + " · " +
+                                                formatLocalDate(
+                                                    version.completedAtEpochMs
+                                                        ?: version.updatedAtEpochMs,
+                                                ),
+                                        )
+                                    },
+                                    onClick = {
+                                        showVersions = false
+                                        onChooseVersion(version.id)
+                                    },
+                                )
+                            }
                         }
                     }
                 }
             }
-        }
-        item {
-            Card(shape = localScribeShape, colors = localScribeCardColors()) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp),
+            item {
+                OutlinedTextField(
+                    query,
+                    setQuery,
+                    label = { Text("Поиск по тексту") },
+                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(18.dp),
+                )
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
-                    Text("Оригинальная запись", style = MaterialTheme.typography.titleMedium)
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
+                    IconButton(
+                        enabled = correctedSegments.isNotEmpty(),
+                        onClick = {
+                            clipboard.setText(
+                                AnnotatedString(correctedSegments.joinToString("\n") { it.text }),
+                            )
+                        },
+                    ) {
+                        Icon(Icons.Default.ContentCopy, contentDescription = "Копировать текст")
+                    }
+                    IconButton(
+                        enabled = correctedSegments.isNotEmpty(),
+                        onClick = {
                             scope.launch {
                                 val source =
                                     job?.let {
                                         graph.audioRepository.getSource(it.sourceId)?.source
                                     } ?: return@launch
-                                if (playback.isPlaying) player.pause() else player.play(source.uri)
+                                runCatching {
+                                    TranscriptExporter(context).share(
+                                        source,
+                                        correctedSegments,
+                                        ExportFormat.TXT,
+                                    )
+                                }.onSuccess {
+                                    setStatus("Текст отправлен")
+                                }.onFailure {
+                                    setStatus("Не удалось поделиться текстом")
+                                }
                             }
-                        }) {
-                            Icon(
-                                if (playback.isPlaying) {
-                                    Icons.Default.Pause
-                                } else {
-                                    Icons.Default.PlayArrow
-                                },
-                                contentDescription = null,
-                            )
-                            Text(if (playback.isPlaying) "Пауза" else "Воспроизвести")
-                        }
-                    }
-                    Slider(
-                        value =
-                            playback.positionMs
-                                .coerceIn(
-                                    0L,
-                                    playback.durationMs.coerceAtLeast(1L),
-                                ).toFloat(),
-                        onValueChange = { position ->
-                            sourceUri?.let { player.seekTo(it, position.toLong()) }
                         },
-                        valueRange = 0f..playback.durationMs.coerceAtLeast(1L).toFloat(),
-                        modifier =
-                            Modifier.fillMaxWidth().semantics {
-                                contentDescription = "Позиция воспроизведения"
-                            },
-                    )
-                    Text(
-                        formatAudioDuration(playback.positionMs) + " / " +
-                            formatAudioDuration(playback.durationMs),
-                        style = MaterialTheme.typography.bodySmall,
-                    )
-                    playback.errorMessage?.let {
-                        Text(it, color = MaterialTheme.colorScheme.error)
+                    ) {
+                        Icon(Icons.Default.Share, contentDescription = "Поделиться текстом")
+                    }
+                    IconButton(
+                        enabled = correctedSegments.isNotEmpty(),
+                        onClick = { showExport = true },
+                    ) {
+                        Icon(
+                            Icons.Default.FileDownload,
+                            contentDescription = "Экспортировать текст",
+                        )
                     }
                 }
             }
-        }
-        item {
-            OutlinedTextField(
-                query,
-                setQuery,
-                label = { Text("Поиск по тексту") },
-                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(18.dp),
-            )
-        }
-        item {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(12.dp),
-            ) {
-                IconButton(
-                    enabled = segments.isNotEmpty(),
-                    onClick = {
-                        clipboard.setText(AnnotatedString(segments.joinToString("\n") { it.text }))
-                    },
-                ) {
-                    Icon(Icons.Default.ContentCopy, contentDescription = "Копировать текст")
+            if (job?.status == JobStatus.COMPLETED) {
+                item {
+                    OutlinedButton(
+                        modifier = Modifier.fillMaxWidth(),
+                        onClick = { job?.sourceId?.let(onRetranscribe) },
+                    ) {
+                        Icon(Icons.Default.Refresh, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Распознать заново")
+                    }
                 }
-                IconButton(
-                    enabled = segments.isNotEmpty(),
-                    onClick = {
-                        scope.launch {
-                            val source =
-                                job?.let {
-                                    graph.audioRepository.getSource(it.sourceId)?.source
-                                } ?: return@launch
-                            runCatching {
-                                TranscriptExporter(context).share(
-                                    source,
-                                    segments,
-                                    ExportFormat.TXT,
-                                )
-                            }.onSuccess {
-                                setStatus("Текст отправлен")
-                            }.onFailure {
-                                setStatus("Не удалось поделиться текстом")
-                            }
+            }
+            if (visibleSegments.isEmpty()) {
+                item {
+                    Card(shape = localScribeShape, colors = localScribeCardColors()) {
+                        Column(
+                            modifier = Modifier.fillMaxWidth().padding(22.dp),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            Text(
+                                if (job?.status == JobStatus.COMPLETED) {
+                                    "Речь не обнаружена"
+                                } else {
+                                    "Текст пока не готов"
+                                },
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                if (job?.status == JobStatus.COMPLETED) {
+                                    "Обработка завершилась, но распознанных фрагментов нет. " +
+                                        "Попробуйте другую модель или проверьте, есть ли речь в аудио."
+                                } else {
+                                    "Распознанные фрагменты появятся здесь по мере " +
+                                        "завершения обработки частей записи."
+                                },
+                            )
                         }
-                    },
-                ) {
-                    Icon(Icons.Default.Share, contentDescription = "Поделиться текстом")
+                    }
                 }
-                IconButton(
-                    enabled = segments.isNotEmpty(),
-                    onClick = { showExport = true },
-                ) {
-                    Icon(Icons.Default.FileDownload, contentDescription = "Экспортировать текст")
-                }
+            } else if (filtered.isEmpty()) {
+                item { Text("По запросу ничего не найдено.") }
             }
-        }
-        if (job?.status == JobStatus.COMPLETED) {
-            item {
-                OutlinedButton(
-                    modifier = Modifier.fillMaxWidth(),
-                    onClick = { job?.sourceId?.let(onRetranscribe) },
+            items(filtered, key = { it.id }) { segment ->
+                val original = segments.firstOrNull { it.id == segment.id }
+                val corrected =
+                    original?.let { source ->
+                        corrections[source.id]?.takeIf { correction ->
+                            correction.originalText == source.text
+                        }
+                    }
+                Card(
+                    colors =
+                        if (activeIndex != null && filtered[activeIndex].id == segment.id) {
+                            androidx.compose.material3.CardDefaults.cardColors(
+                                containerColor = MaterialTheme.colorScheme.primaryContainer,
+                            )
+                        } else {
+                            localScribeCardColors()
+                        },
+                    shape = RoundedCornerShape(14.dp),
+                    modifier =
+                        Modifier.fillMaxWidth().clickable {
+                            scope.launch {
+                                val uri =
+                                    job?.let {
+                                        graph.audioRepository
+                                            .getSource(it.sourceId)
+                                            ?.source
+                                            ?.uri
+                                    }
+                                uri?.let { player.seekTo(it, segment.absoluteStartMs) }
+                            }
+                        },
                 ) {
-                    Icon(Icons.Default.Refresh, contentDescription = null)
-                    Spacer(Modifier.width(8.dp))
-                    Text("Распознать заново")
-                }
-            }
-        }
-        if (visibleSegments.isEmpty()) {
-            item {
-                Card(shape = localScribeShape, colors = localScribeCardColors()) {
                     Column(
-                        modifier = Modifier.fillMaxWidth().padding(22.dp),
-                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                        Modifier.fillMaxWidth().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
-                            if (job?.status == JobStatus.COMPLETED) {
-                                "Речь не обнаружена"
-                            } else {
-                                "Текст пока не готов"
-                            },
-                            style = MaterialTheme.typography.titleMedium,
+                            formatAudioDuration(segment.absoluteStartMs),
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelMedium,
                         )
-                        Text(
-                            if (job?.status == JobStatus.COMPLETED) {
-                                "Обработка завершилась, но распознанных фрагментов нет. " +
-                                    "Попробуйте другую модель или проверьте, есть ли речь в аудио."
-                            } else {
-                                "Распознанные фрагменты появятся здесь по мере " +
-                                    "завершения обработки частей записи."
-                            },
-                        )
+                        Text(segment.text, style = MaterialTheme.typography.bodyLarge)
+                        if (corrected != null) {
+                            Text("Исправлено", style = MaterialTheme.typography.labelSmall)
+                        }
+                        if (original != null && !segment.id.startsWith("preview-")) {
+                            TextButton(
+                                onClick = {
+                                    editTarget = original
+                                    editError = null
+                                    editText = corrected?.editedText ?: original.text
+                                },
+                                modifier =
+                                    Modifier.semantics {
+                                        contentDescription = "Редактировать фрагмент"
+                                    },
+                            ) {
+                                Text("Редактировать")
+                            }
+                        }
+                        if (segment.id.startsWith("preview-")) {
+                            Text(
+                                "Распознаётся · предварительный текст",
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.labelSmall,
+                            )
+                        }
                     }
                 }
             }
-        } else if (filtered.isEmpty()) {
-            item { Text("По запросу ничего не найдено.") }
+            item { Spacer(Modifier.height(16.dp)) }
         }
-        items(filtered, key = { it.id }) { segment ->
-            Card(
-                colors = localScribeCardColors(),
-                shape = RoundedCornerShape(14.dp),
-                modifier =
-                    Modifier.fillMaxWidth().clickable {
+        undoLastEdit?.let { (original, previousText) ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    "Последнее исправление можно отменить",
+                    modifier = Modifier.weight(1f),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                TextButton(
+                    onClick = {
                         scope.launch {
-                            val uri =
-                                job?.let {
-                                    graph.audioRepository
-                                        .getSource(it.sourceId)
-                                        ?.source
-                                        ?.uri
-                                }
-                            uri?.let { player.seekTo(it, segment.absoluteStartMs) }
+                            runCatching {
+                                graph.transcriptCorrections.save(jobId, original, previousText)
+                            }.onSuccess {
+                                undoLastEdit = null
+                            }.onFailure {
+                                setStatus("Не удалось отменить исправление")
+                            }
                         }
                     },
+                ) { Text("Отменить правку") }
+            }
+        }
+        if (!followPlayback) {
+            TextButton(
+                onClick = { followPlayback = true },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Вернуться к воспроизведению") }
+        }
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = localScribeCardColors(),
+            shape = RoundedCornerShape(topStart = 18.dp, topEnd = 18.dp),
+        ) {
+            Column(
+                Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                Column(
-                    Modifier.fillMaxWidth().padding(14.dp),
-                    verticalArrangement = Arrangement.spacedBy(6.dp),
+                Slider(
+                    value =
+                        playback.positionMs
+                            .coerceIn(0L, playback.durationMs.coerceAtLeast(1L))
+                            .toFloat(),
+                    onValueChange = { position ->
+                        sourceUri?.let { player.seekTo(it, position.toLong()) }
+                    },
+                    valueRange = 0f..playback.durationMs.coerceAtLeast(1L).toFloat(),
+                    modifier =
+                        Modifier.fillMaxWidth().semantics {
+                            contentDescription = "Позиция воспроизведения"
+                        },
+                )
+                Text(
+                    formatAudioDuration(playback.positionMs) + " / " +
+                        formatAudioDuration(playback.durationMs),
+                    style = MaterialTheme.typography.labelSmall,
+                )
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceEvenly,
+                    verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Text(
-                        formatAudioDuration(segment.absoluteStartMs),
-                        color = MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.labelMedium,
-                    )
-                    Text(segment.text, style = MaterialTheme.typography.bodyLarge)
-                    if (segment.id.startsWith("preview-")) {
-                        Text(
-                            "Распознаётся · предварительный текст",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            style = MaterialTheme.typography.labelSmall,
+                    TextButton(
+                        onClick = {
+                            sourceUri?.let {
+                                player.seekTo(
+                                    it,
+                                    boundedSeek(playback.positionMs, -10_000L, playback.durationMs),
+                                )
+                            }
+                        },
+                    ) { Text("−10 с") }
+                    IconButton(onClick = {
+                        sourceUri?.let {
+                            if (playback.isPlaying) player.pause() else player.play(it)
+                        }
+                    }) {
+                        Icon(
+                            if (playback.isPlaying) {
+                                Icons.Default.Pause
+                            } else {
+                                Icons.Default.PlayArrow
+                            },
+                            contentDescription =
+                                if (playback.isPlaying) "Пауза" else "Воспроизвести",
                         )
                     }
+                    TextButton(
+                        onClick = {
+                            sourceUri?.let {
+                                player.seekTo(
+                                    it,
+                                    boundedSeek(playback.positionMs, 10_000L, playback.durationMs),
+                                )
+                            }
+                        },
+                    ) { Text("+10 с") }
+                    Box {
+                        TextButton(onClick = { showSpeedMenu = true }) {
+                            Text(playback.speed.toString() + "×")
+                        }
+                        androidx.compose.material3.DropdownMenu(
+                            expanded = showSpeedMenu,
+                            onDismissRequest = { showSpeedMenu = false },
+                        ) {
+                            listOf(0.5f, 0.75f, 1f, 1.25f, 1.5f, 1.75f, 2f).forEach { speed ->
+                                androidx.compose.material3.DropdownMenuItem(
+                                    text = { Text(speed.toString() + "×") },
+                                    onClick = {
+                                        showSpeedMenu = false
+                                        playbackPreferences.speed = speed
+                                        player.setSpeed(speed)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                }
+                playback.errorMessage?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.error,
+                    )
                 }
             }
         }
-        item { Spacer(Modifier.height(16.dp)) }
     }
-    BackHandler(enabled = showExport) { showExport = false }
+    BackHandler(enabled = showExport || editTarget != null) {
+        if (editTarget != null) editTarget = null else showExport = false
+    }
+    editTarget?.let { original ->
+        val correction =
+            corrections[original.id]?.takeIf { it.originalText == original.text }
+        AlertDialog(
+            onDismissRequest = { editTarget = null },
+            title = { Text("Редактировать фрагмент") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Исходный текст Whisper сохраняется отдельно.",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    OutlinedTextField(
+                        value = editText,
+                        onValueChange = { editText = it.take(50_000) },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Исправленный текст") },
+                        minLines = 3,
+                        maxLines = 9,
+                    )
+                    editError?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                    }
+                    if (correction != null) {
+                        Text(
+                            "Оригинал: " + original.text,
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                        TextButton(onClick = {
+                            scope.launch {
+                                runCatching {
+                                    graph.transcriptCorrections.restore(jobId, original.id)
+                                }.onSuccess {
+                                    undoLastEdit = original to correction.editedText
+                                    editTarget = null
+                                }.onFailure {
+                                    editError = "Не удалось восстановить исходный текст"
+                                }
+                            }
+                        }) { Text("Восстановить оригинал") }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    enabled = editText.isNotBlank(),
+                    onClick = {
+                        val newText = editText
+                        val previousText = correction?.editedText ?: original.text
+                        scope.launch {
+                            runCatching {
+                                graph.transcriptCorrections.save(jobId, original, newText)
+                            }.onSuccess {
+                                if (newText != previousText) {
+                                    undoLastEdit = original to previousText
+                                }
+                                editTarget = null
+                            }.onFailure {
+                                editError = "Не удалось сохранить исправление"
+                            }
+                        }
+                    },
+                ) { Text("Сохранить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { editTarget = null }) { Text("Отмена") }
+            },
+        )
+    }
     if (showExport) {
         ModalBottomSheet(onDismissRequest = { showExport = false }) {
             Column(
@@ -1704,7 +1962,7 @@ private fun TranscriptScreen(
                 ExportFormat.entries.forEach { format ->
                     OutlinedButton(
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = segments.isNotEmpty(),
+                        enabled = correctedSegments.isNotEmpty(),
                         onClick = {
                             showExport = false
                             setExportFormat(format.name)
