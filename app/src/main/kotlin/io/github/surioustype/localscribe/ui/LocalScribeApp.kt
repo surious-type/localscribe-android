@@ -75,6 +75,7 @@ import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
@@ -302,9 +303,11 @@ fun LocalScribeApp(graph: AppGraph, receivedUri: String?) {
                                 selectedJobId,
                                 graph,
                                 savedUi.transcriptQuery,
+                                savedUi.transcriptReadingMode,
                                 savedUi.transcriptSeekToMs,
                                 savedUi.exportFormat,
                                 uiModel::setTranscriptQuery,
+                                uiModel::setTranscriptReadingMode,
                                 uiModel::setExportFormat,
                                 uiModel::completeTranscriptExport,
                                 uiModel::setStatusMessage,
@@ -388,6 +391,7 @@ private fun Home(
     val sources by graph.audioRepository.observeSources().collectAsStateWithLifecycle(emptyList())
     val jobs by graph.transcriptionRepository.observeJobs().collectAsStateWithLifecycle(emptyList())
     val searchSegments by graph.transcriptSearch.collectAsStateWithLifecycle(emptyList())
+    val primaryVersions by graph.transcriptVersions.selectedVersions.collectAsStateWithLifecycle()
     var filter by remember { mutableStateOf(preferences.libraryFilter) }
     var sort by remember { mutableStateOf(preferences.librarySort) }
     var renameTarget by remember { mutableStateOf<AudioSourceRecord?>(null) }
@@ -451,7 +455,12 @@ private fun Home(
             searchLibrary(ordered, searchSegments, query)
         }
     val openRecord: (AudioSourceRecord) -> Unit = { record ->
-        val completed = latestCompletedTranscriptionJob(jobs, record.source.id)
+        val completed =
+            preferredCompletedTranscript(
+                jobs,
+                record.source.id,
+                primaryVersions[record.source.id],
+            )
         val active =
             jobs.any {
                 it.sourceId == record.source.id &&
@@ -821,7 +830,13 @@ private fun SourceControls(
     val existingJobs by graph.transcriptionRepository
         .observeJobs()
         .collectAsStateWithLifecycle(emptyList())
-    val latestCompletedJob = latestCompletedTranscriptionJob(existingJobs, sourceId)
+    val primaryVersions by graph.transcriptVersions.selectedVersions.collectAsStateWithLifecycle()
+    val latestCompletedJob =
+        preferredCompletedTranscript(
+            existingJobs,
+            sourceId,
+            primaryVersions[sourceId],
+        )
     val transcriptionModels = installedModels.filter { it.descriptorId != "silero-v6.2.0" }
     val installedModelIds = transcriptionModels.map { it.descriptorId }.distinct()
     val vadModels = installedModels.filter { it.descriptorId == "silero-v6.2.0" }
@@ -1345,9 +1360,11 @@ private fun TranscriptScreen(
     jobId: String,
     graph: AppGraph,
     query: String,
+    readingMode: String,
     seekToMs: Long?,
     pendingExportFormat: String?,
     setQuery: (String) -> Unit,
+    setReadingMode: (TranscriptReadingMode) -> Unit,
     setExportFormat: (String?) -> Unit,
     completeExport: (Boolean) -> Unit,
     setStatus: (String?) -> Unit,
@@ -1364,6 +1381,11 @@ private fun TranscriptScreen(
         .observeJobs()
         .collectAsStateWithLifecycle(emptyList())
     val versions = completedTranscriptionVersions(allJobs, job?.sourceId.orEmpty())
+    val primaryVersions by graph.transcriptVersions.selectedVersions.collectAsStateWithLifecycle()
+    val readerMode =
+        runCatching {
+            TranscriptReadingMode.valueOf(readingMode)
+        }.getOrDefault(TranscriptReadingMode.TIMECODES)
     var showVersions by remember { mutableStateOf(false) }
     var sourceUri by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(job?.sourceId) {
@@ -1475,20 +1497,17 @@ private fun TranscriptScreen(
     }
     val filtered =
         remember(visibleSegments, query) {
-            visibleSegments.filter { it.text.contains(query, ignoreCase = true) }
+            searchableTranscriptSegments(visibleSegments, query)
         }
     val transcriptListState = rememberLazyListState()
-    val versionHeader =
-        if (
-            versions.size > 1 ||
-            (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)
-        ) {
-            1
-        } else {
-            0
-        }
+    val readingPositionStore = remember(context) { TranscriptReadingPositionStore(context) }
+    val savedReadingPosition = remember(jobId) { readingPositionStore.read(jobId) }
+    var pendingReadingRestore by remember(jobId) {
+        mutableStateOf(savedReadingPosition != null)
+    }
+    val versionHeader = if (versions.isNotEmpty()) 1 else 0
     val rerunHeader = if (job?.status == JobStatus.COMPLETED) 1 else 0
-    val transcriptRowOffset = versionHeader + rerunHeader + 2
+    val transcriptRowOffset = versionHeader + rerunHeader + 3
     val activeIndex =
         remember(filtered, playback.positionMs) {
             activeTranscriptSegmentIndex(filtered, playback.positionMs)
@@ -1499,11 +1518,88 @@ private fun TranscriptScreen(
                 if (isScrolling && !programmaticScroll) followPlayback = false
             }
     }
-    LaunchedEffect(activeIndex, followPlayback, playback.isPlaying, transcriptRowOffset) {
-        if (followPlayback && activeIndex != null) {
+    LaunchedEffect(
+        jobId,
+        savedReadingPosition,
+        filtered,
+        transcriptRowOffset,
+        seekToMs,
+        query,
+        versions,
+    ) {
+        if (pendingReadingRestore) {
+            if (seekToMs != null || query.isNotBlank()) {
+                pendingReadingRestore = false
+            } else if (
+                filtered.isNotEmpty() &&
+                (job?.status != JobStatus.COMPLETED || versions.any { it.id == jobId })
+            ) {
+                val position = savedReadingPosition
+                val segmentIndex =
+                    filtered.indexOfFirst { it.id == position?.segmentId }
+                pendingReadingRestore = false
+                if (position != null && (position.segmentId == null || segmentIndex >= 0)) {
+                    programmaticScroll = true
+                    try {
+                        val targetIndex =
+                            if (position.segmentId == null) {
+                                0
+                            } else {
+                                segmentIndex + transcriptRowOffset
+                            }
+                        transcriptListState.scrollToItem(targetIndex, position.offsetPx)
+                    } finally {
+                        programmaticScroll = false
+                    }
+                }
+            }
+        }
+    }
+    LaunchedEffect(transcriptListState, filtered, transcriptRowOffset, pendingReadingRestore) {
+        snapshotFlow {
+            Triple(
+                transcriptListState.isScrollInProgress,
+                transcriptListState.firstVisibleItemIndex,
+                transcriptListState.firstVisibleItemScrollOffset,
+            )
+        }.collect { (scrolling, index, offset) ->
+            if (!scrolling && !pendingReadingRestore && filtered.isNotEmpty()) {
+                val segment = filtered.getOrNull(index - transcriptRowOffset)
+                readingPositionStore.save(jobId, segment?.id, offset)
+            }
+        }
+    }
+    val latestFiltered by rememberUpdatedState(filtered)
+    val latestRowOffset by rememberUpdatedState(transcriptRowOffset)
+    val readingPositionReady by rememberUpdatedState(!pendingReadingRestore)
+    DisposableEffect(jobId, transcriptListState) {
+        onDispose {
+            if (readingPositionReady && latestFiltered.isNotEmpty()) {
+                val index = transcriptListState.firstVisibleItemIndex - latestRowOffset
+                val segmentId = latestFiltered.getOrNull(index)?.id
+                readingPositionStore.save(
+                    jobId,
+                    segmentId,
+                    transcriptListState.firstVisibleItemScrollOffset,
+                )
+            }
+        }
+    }
+    LaunchedEffect(
+        activeIndex,
+        followPlayback,
+        playback.isPlaying,
+        transcriptRowOffset,
+        pendingReadingRestore,
+    ) {
+        if (
+            !pendingReadingRestore &&
+            shouldAutoFollowTranscript(followPlayback, playback.isPlaying, activeIndex)
+        ) {
+            val index = requireNotNull(activeIndex)
             programmaticScroll = true
             try {
-                transcriptListState.animateScrollToItem(activeIndex + transcriptRowOffset)
+                transcriptListState.animateScrollToItem(index + transcriptRowOffset)
             } finally {
                 programmaticScroll = false
             }
@@ -1534,44 +1630,25 @@ private fun TranscriptScreen(
         LazyColumn(
             state = transcriptListState,
             modifier = Modifier.weight(1f),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+            verticalArrangement =
+                Arrangement.spacedBy(
+                    if (readerMode == TranscriptReadingMode.CONTINUOUS) 2.dp else 12.dp,
+                ),
         ) {
-            // A running rerun still lets the user open an earlier completed transcript.
-            if (versions.size > 1 ||
-                (versions.isNotEmpty() && job?.status != JobStatus.COMPLETED)
-            ) {
+            // Completed attempts survive newer running or failed reruns.
+            if (versions.isNotEmpty()) {
                 item {
-                    Box {
-                        OutlinedButton(onClick = { showVersions = true }) {
-                            Text(
-                                "Версия: " + (job?.config?.modelId ?: "") + " · " +
-                                    formatLocalDate(
-                                        job?.completedAtEpochMs ?: job?.updatedAtEpochMs ?: 0L,
-                                    ),
-                            )
-                        }
-                        androidx.compose.material3.DropdownMenu(
-                            expanded = showVersions,
-                            onDismissRequest = { showVersions = false },
-                        ) {
-                            versions.forEach { version ->
-                                androidx.compose.material3.DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            version.config.modelId + " · " +
-                                                formatLocalDate(
-                                                    version.completedAtEpochMs
-                                                        ?: version.updatedAtEpochMs,
-                                                ),
-                                        )
-                                    },
-                                    onClick = {
-                                        showVersions = false
-                                        onChooseVersion(version.id)
-                                    },
-                                )
-                            }
-                        }
+                    OutlinedButton(onClick = { showVersions = true }) {
+                        val isPrimary =
+                            preferredCompletedTranscript(
+                                versions,
+                                job?.sourceId.orEmpty(),
+                                primaryVersions[job?.sourceId.orEmpty()],
+                            )?.id == jobId
+                        Text(
+                            "Версии и сравнение · " + versions.size +
+                                (if (isPrimary) " · Основная" else ""),
+                        )
                     }
                 }
             }
@@ -1584,6 +1661,24 @@ private fun TranscriptScreen(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(18.dp),
                 )
+            }
+            item {
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    item {
+                        FilterChip(
+                            selected = readerMode == TranscriptReadingMode.CONTINUOUS,
+                            onClick = { setReadingMode(TranscriptReadingMode.CONTINUOUS) },
+                            label = { Text("Сплошной текст") },
+                        )
+                    }
+                    item {
+                        FilterChip(
+                            selected = readerMode == TranscriptReadingMode.TIMECODES,
+                            onClick = { setReadingMode(TranscriptReadingMode.TIMECODES) },
+                            label = { Text("С таймкодами") },
+                        )
+                    }
+                }
             }
             item {
                 Row(
@@ -1643,7 +1738,7 @@ private fun TranscriptScreen(
                     ) {
                         Icon(Icons.Default.Refresh, contentDescription = null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Распознать заново")
+                        Text("Настроить повторное распознавание")
                     }
                 }
             }
@@ -1685,64 +1780,75 @@ private fun TranscriptScreen(
                             correction.originalText == source.text
                         }
                     }
-                Card(
-                    colors =
-                        if (activeIndex != null && filtered[activeIndex].id == segment.id) {
-                            androidx.compose.material3.CardDefaults.cardColors(
-                                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                            )
-                        } else {
-                            localScribeCardColors()
+                if (readerMode == TranscriptReadingMode.CONTINUOUS) {
+                    TranscriptContinuousParagraph(
+                        segment = segment,
+                        query = query,
+                        active = activeIndex != null && filtered[activeIndex].id == segment.id,
+                        onSeek = {
+                            sourceUri?.let { player.seekTo(it, segment.absoluteStartMs) }
                         },
-                    shape = RoundedCornerShape(14.dp),
-                    modifier =
-                        Modifier.fillMaxWidth().clickable {
-                            scope.launch {
-                                val uri =
-                                    job?.let {
-                                        graph.audioRepository
-                                            .getSource(it.sourceId)
-                                            ?.source
-                                            ?.uri
-                                    }
-                                uri?.let { player.seekTo(it, segment.absoluteStartMs) }
-                            }
-                        },
-                ) {
-                    Column(
-                        Modifier.fillMaxWidth().padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    )
+                } else {
+                    Card(
+                        colors =
+                            if (activeIndex != null && filtered[activeIndex].id == segment.id) {
+                                androidx.compose.material3.CardDefaults.cardColors(
+                                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                                )
+                            } else {
+                                localScribeCardColors()
+                            },
+                        shape = RoundedCornerShape(14.dp),
+                        modifier =
+                            Modifier.fillMaxWidth().clickable {
+                                scope.launch {
+                                    val uri =
+                                        job?.let {
+                                            graph.audioRepository
+                                                .getSource(it.sourceId)
+                                                ?.source
+                                                ?.uri
+                                        }
+                                    uri?.let { player.seekTo(it, segment.absoluteStartMs) }
+                                }
+                            },
                     ) {
-                        Text(
-                            formatAudioDuration(segment.absoluteStartMs),
-                            color = MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelMedium,
-                        )
-                        Text(segment.text, style = MaterialTheme.typography.bodyLarge)
-                        if (corrected != null) {
-                            Text("Исправлено", style = MaterialTheme.typography.labelSmall)
-                        }
-                        if (original != null && !segment.id.startsWith("preview-")) {
-                            TextButton(
-                                onClick = {
-                                    editTarget = original
-                                    editError = null
-                                    editText = corrected?.editedText ?: original.text
-                                },
-                                modifier =
-                                    Modifier.semantics {
-                                        contentDescription = "Редактировать фрагмент"
-                                    },
-                            ) {
-                                Text("Редактировать")
-                            }
-                        }
-                        if (segment.id.startsWith("preview-")) {
+                        Column(
+                            Modifier.fillMaxWidth().padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
                             Text(
-                                "Распознаётся · предварительный текст",
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = MaterialTheme.typography.labelSmall,
+                                formatAudioDuration(segment.absoluteStartMs),
+                                color = MaterialTheme.colorScheme.primary,
+                                style = MaterialTheme.typography.labelMedium,
                             )
+                            Text(segment.text, style = MaterialTheme.typography.bodyLarge)
+                            if (corrected != null) {
+                                Text("Исправлено", style = MaterialTheme.typography.labelSmall)
+                            }
+                            if (original != null && !segment.id.startsWith("preview-")) {
+                                TextButton(
+                                    onClick = {
+                                        editTarget = original
+                                        editError = null
+                                        editText = corrected?.editedText ?: original.text
+                                    },
+                                    modifier =
+                                        Modifier.semantics {
+                                            contentDescription = "Редактировать фрагмент"
+                                        },
+                                ) {
+                                    Text("Редактировать")
+                                }
+                            }
+                            if (segment.id.startsWith("preview-")) {
+                                Text(
+                                    "Распознаётся · предварительный текст",
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    style = MaterialTheme.typography.labelSmall,
+                                )
+                            }
                         }
                     }
                 }
@@ -1777,7 +1883,21 @@ private fun TranscriptScreen(
         }
         if (!followPlayback) {
             TextButton(
-                onClick = { followPlayback = true },
+                onClick = {
+                    followPlayback = true
+                    activeIndex?.let { index ->
+                        scope.launch {
+                            programmaticScroll = true
+                            try {
+                                transcriptListState.animateScrollToItem(
+                                    index + transcriptRowOffset,
+                                )
+                            } finally {
+                                programmaticScroll = false
+                            }
+                        }
+                    }
+                },
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Вернуться к воспроизведению") }
         }
@@ -1879,6 +1999,17 @@ private fun TranscriptScreen(
                 }
             }
         }
+    }
+    if (showVersions && job != null && versions.isNotEmpty()) {
+        TranscriptVersionsSheet(
+            graph = graph,
+            current = requireNotNull(job),
+            versions = versions,
+            primaryId = primaryVersions[job?.sourceId.orEmpty()],
+            onChooseVersion = onChooseVersion,
+            onDismiss = { showVersions = false },
+            onStatus = setStatus,
+        )
     }
     BackHandler(enabled = showExport || editTarget != null) {
         if (editTarget != null) editTarget = null else showExport = false
