@@ -35,16 +35,6 @@ jobs:
           bash scripts/version/test-validate-release.sh && ./gradlew --stacktrace staticAnalysis :core:test :app:testGithubDebugUnitTest
           :app:testPlayDebugUnitTest :app:lintGithubDebug :app:lintPlayDebug
           :app:assembleGithubDebug :app:assemblePlayDebug
-      - name: Capture generated Room schema for migration review
-        if: always() && github.event_name == 'pull_request'
-        run: |
-          schema="app/schemas/io.github.surioustype.localscribe.data.LocalScribeDatabase/7.json"
-          if [ -f "$schema" ]; then
-            echo ROOM_SCHEMA_7_BEGIN
-            base64 -w0 "$schema"
-            echo
-            echo ROOM_SCHEMA_7_END
-          fi
       - name: Verify signed installable APK
         run: |
           apk="app/build/outputs/apk/github/debug/app-github-debug.apk"
