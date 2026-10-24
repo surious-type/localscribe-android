@@ -104,7 +104,6 @@ import io.github.surioustype.localscribe.benchmark.BenchmarkRunState
 import io.github.surioustype.localscribe.benchmark.BenchmarkStep
 import io.github.surioustype.localscribe.core.domain.ChunkPlanner
 import io.github.surioustype.localscribe.core.domain.ChunkWindowProfiles
-import io.github.surioustype.localscribe.core.domain.TranscriptAssembler
 import io.github.surioustype.localscribe.core.model.AppVersion
 import io.github.surioustype.localscribe.core.model.AudioSourceRecord
 import io.github.surioustype.localscribe.core.model.BenchmarkRecord
@@ -1599,7 +1598,7 @@ private fun TranscriptScreen(
             jobId,
         ).collectAsStateWithLifecycle(emptyList())
     val segments =
-        remember(chunks, rawSegments) { TranscriptAssembler().assemble(chunks, rawSegments) }
+        remember(chunks, rawSegments) { assembleAvailableTranscript(chunks, rawSegments) }
     val corrections by graph.transcriptCorrections
         .observe(jobId)
         .collectAsStateWithLifecycle(emptyMap())
