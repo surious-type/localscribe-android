@@ -24,7 +24,6 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import io.github.surioustype.localscribe.core.domain.TranscriptAssembler
 import io.github.surioustype.localscribe.core.model.TranscriptionJob
 import io.github.surioustype.localscribe.di.AppGraph
 import java.text.DateFormat
@@ -160,8 +159,8 @@ private fun TranscriptVersionComparisonDialog(
     }.collectAsStateWithLifecycle(emptyList())
     val changes =
         remember(leftChunks, leftSegments, rightChunks, rightSegments) {
-            val before = TranscriptAssembler().assemble(leftChunks, leftSegments)
-            val after = TranscriptAssembler().assemble(rightChunks, rightSegments)
+            val before = assembleAvailableTranscript(leftChunks, leftSegments)
+            val after = assembleAvailableTranscript(rightChunks, rightSegments)
             compareTranscriptVersions(before, after)
         }
     AlertDialog(
