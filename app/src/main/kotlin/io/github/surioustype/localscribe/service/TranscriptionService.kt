@@ -9,6 +9,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.os.PowerManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.ServiceCompat
 import io.github.surioustype.localscribe.R
@@ -56,6 +57,7 @@ class TranscriptionService : Service() {
     private var thermalJob: Job? = null
     private val manualResumeIds = mutableSetOf<String>()
     private var latestStartId = 0
+    private var executionWakeLock: PowerManager.WakeLock? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -78,10 +80,12 @@ class TranscriptionService : Service() {
                 onStarted = { jobId ->
                     controlRouting.executionStarted(jobId)
                     startForegroundCompat(jobId, 0, 0)
+                    acquireExecutionWakeLock()
                     observeProgress(jobId)
                 },
                 onIdle = { _ ->
                     controlRouting.executionIdle()
+                    releaseExecutionWakeLock()
                     stopForegroundAndSelf(latestStartId)
                 },
             )
@@ -194,6 +198,7 @@ class TranscriptionService : Service() {
     }
 
     override fun onDestroy() {
+        releaseExecutionWakeLock()
         executionQueue.cancel()
         notificationJob?.cancel()
         thermalJob?.cancel()
@@ -275,6 +280,24 @@ class TranscriptionService : Service() {
                 foregroundServiceType(),
             )
         }
+    }
+
+    /** Keep CPU execution available while the user-requested, foreground-notified job runs.
+     * Android may still enforce media-processing quotas or OEM process restrictions.
+     * The lock is process-owned and always released on idle or service teardown.
+     */
+    private fun acquireExecutionWakeLock() {
+        val lock = executionWakeLock ?: run {
+            val manager = getSystemService(POWER_SERVICE) as PowerManager
+            manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:transcription")
+                .apply { setReferenceCounted(false) }
+                .also { executionWakeLock = it }
+        }
+        if (!lock.isHeld) lock.acquire()
+    }
+
+    private fun releaseExecutionWakeLock() {
+        executionWakeLock?.let { if (it.isHeld) it.release() }
     }
 
     private fun foregroundServiceType(): Int =
