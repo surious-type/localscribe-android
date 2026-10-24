@@ -3,12 +3,15 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <limits>
+#include <string_view>
 #include <mutex>
 #include <string>
 #include <unordered_map>
 #include <utility>
 
 #include "whisper.h"
+#include "utf8_to_utf16.h"
 
 namespace {
 
@@ -61,6 +64,22 @@ void throw_native_error(JNIEnv * env, jint error_code) {
         }
     }
     env->DeleteLocalRef(exception_class);
+}
+
+/**
+ * Whisper text is standard UTF-8, NOT JNI Modified UTF-8. In particular an
+ * invalid continuation byte and non-BMP characters must never reach NewStringUTF.
+ */
+jstring new_string_from_whisper_utf8(JNIEnv * env, const char * text) {
+    const std::string_view input = text == nullptr ? std::string_view() : std::string_view(text);
+    const auto utf16 = localscribe::utf8_to_utf16<jchar>(input);
+    if (utf16.size() > static_cast<std::size_t>(std::numeric_limits<jsize>::max())) {
+        throw_native_error(env, native_error_failure);
+        return nullptr;
+    }
+    static constexpr jchar empty = 0;
+    return env->NewString(utf16.empty() ? &empty : utf16.data(),
+                          static_cast<jsize>(utf16.size()));
 }
 
 std::shared_ptr<EngineHandle> find_handle(jlong id) {
@@ -192,7 +211,14 @@ void new_segment_callback(whisper_context * context, whisper_state *, int added,
         const int first = count > added ? count - added : 0;
         for (int i = first; i < count; ++i) {
             const char * text = whisper_full_get_segment_text(context, i);
-            const jstring java_text = env->NewStringUTF(text == nullptr ? "" : text);
+            jstring java_text = nullptr;
+            try {
+                java_text = new_string_from_whisper_utf8(env, text);
+            } catch (...) {
+                // Never unwind a C++ exception through whisper.cpp's C callback.
+                state->handle->abort_requested.store(true, std::memory_order_relaxed);
+                break;
+            }
             if (java_text == nullptr) break;
             env->CallVoidMethod(
                 state->listener,
@@ -229,7 +255,13 @@ jobject make_result(JNIEnv * env, whisper_context * context) {
         const jlong start_ms = whisper_full_get_segment_t0(context, index) * 10;
         const jlong end_ms = whisper_full_get_segment_t1(context, index) * 10;
         const char * text = whisper_full_get_segment_text(context, index);
-        const jstring java_text = env->NewStringUTF(text == nullptr ? "" : text);
+        const jstring java_text = new_string_from_whisper_utf8(env, text);
+        if (java_text == nullptr) {
+            env->DeleteLocalRef(segments);
+            env->DeleteLocalRef(segment_class);
+            env->DeleteLocalRef(list_class);
+            return nullptr;
+        }
         const jobject segment = env->NewObject(
             segment_class,
             segment_constructor,
@@ -340,7 +372,10 @@ static jobject transcribe_internal(
     CancellationState cancellation{vm, signal, is_cancelled, handle.get()};
     jobject listener = segment_listener == nullptr ? nullptr : env->NewGlobalRef(segment_listener);
     SegmentCallbackState streaming{vm, listener, handle.get()};
+    bool references_released = false;
     const auto release_references = [&]() {
+        if (references_released) return;
+        references_released = true;
         env->ReleaseFloatArrayElements(pcm, samples, JNI_ABORT);
         env->DeleteGlobalRef(signal);
         if (listener != nullptr) env->DeleteGlobalRef(listener);

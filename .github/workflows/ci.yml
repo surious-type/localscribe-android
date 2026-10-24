@@ -30,6 +30,12 @@ jobs:
       - uses: gradle/actions/setup-gradle@4733eaac7c1b0da527e4206b7671e0061de1ce37 # v6
         with:
           cache-provider: basic
+      - name: Native UTF-8 to UTF-16 regression tests
+        run: |
+          c++ -std=c++17 -Wall -Wextra -Werror -pedantic \
+            -Iapp/src/main/cpp app/src/test/native/Utf8ToUtf16Test.cpp \
+            -o "$RUNNER_TEMP/localscribe-utf8-test"
+          "$RUNNER_TEMP/localscribe-utf8-test"
       - name: Run format, analysis, tests, lint, and debug builds
         run: >-
           bash scripts/version/test-validate-release.sh && ./gradlew --stacktrace staticAnalysis :core:test :app:testGithubDebugUnitTest
