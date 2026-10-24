@@ -287,12 +287,14 @@ class TranscriptionService : Service() {
      * The lock is process-owned and always released on idle or service teardown.
      */
     private fun acquireExecutionWakeLock() {
-        val lock = executionWakeLock ?: run {
-            val manager = getSystemService(POWER_SERVICE) as PowerManager
-            manager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:transcription")
-                .apply { setReferenceCounted(false) }
-                .also { executionWakeLock = it }
-        }
+        val lock =
+            executionWakeLock ?: run {
+                val manager = getSystemService(POWER_SERVICE) as PowerManager
+                manager
+                    .newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "$packageName:transcription")
+                    .apply { setReferenceCounted(false) }
+                    .also { executionWakeLock = it }
+            }
         if (!lock.isHeld) lock.acquire()
     }
 
